@@ -47,21 +47,34 @@ export default function SynapseScribblePage() {
 
   const handleAudioTranscription = async (audioDataUri: string) => {
     setIsTranscribing(true);
-    setTranscription("Behandler lydoptagelse for transskription...");
-    resetAIOutputs();
+    setTranscription("Behandler lydoptagelse for transskription..."); // Initial placeholder
+    resetAIOutputs(); 
     try {
       const input: TranscribeAudioInput = { audioDataUri };
       const result: TranscribeAudioOutput = await transcribeAudio(input);
-      setTranscription(result.transcription);
+      setTranscription(result.transcription); // Sæt den faktiske transskription
       toast({ title: "Succes", description: "Automatisk transskription fuldført (simuleret)." });
       await handleSummarize(result.transcription);
     } catch (error) {
       console.error("Fejl under (simuleret) transskription:", error);
       toast({ title: "Fejl", description: "Kunne ikke transskribere lyden (simuleret).", variant: "destructive" });
-      setTranscription("");
+      setTranscription(""); // Ryd transskription ved fejl
     } finally {
       setIsTranscribing(false);
     }
+  };
+
+  const handleStartAnalysisFromText = async (currentTranscription: string) => {
+    if (!currentTranscription.trim()) {
+      toast({ title: "Info", description: "Transskription er tom. Kan ikke starte analyse.", variant: "default" });
+      return;
+    }
+    // Nulstil tidligere AI resultater, før ny analyse starter
+    resetAIOutputs(); 
+    // Sikrer at transskriptionen er den brugeren ser, hvis de har redigeret den.
+    setTranscription(currentTranscription); 
+    toast({ title: "AI Analyse Startet", description: "Behandler den angivne tekst..." });
+    await handleSummarize(currentTranscription);
   };
 
   const handleSummarize = async (currentTranscription: string) => {
@@ -70,6 +83,9 @@ export default function SynapseScribblePage() {
       return;
     }
     setIsSummarizing(true);
+    // Nulstil output fra tidligere kørsler, *undtagen* transskriptionen, hvis den er inputtet.
+    // resetAIOutputs() er allerede kaldt hvis det er en ny cyklus. 
+    // Her nulstiller vi specifikt det der kommer *efter* transskription.
     setSummary(""); 
     setIdentifiedThemes("");
     setWhiteboardContent("");
@@ -81,15 +97,21 @@ export default function SynapseScribblePage() {
 
       if (result && typeof result.summary === 'string' && result.summary.trim() !== "") {
         setSummary(result.summary);
+        // Udled temaer fra resuméet
         const firstSentence = result.summary.split('. ')[0];
         let themes = "";
         if (firstSentence) {
-          themes = firstSentence.split(/[\s,]+/).slice(0, 5).map(t => t.replace(/[^\w\sæøåÆØÅ]/gi, '')).filter(t => t.length > 2).join(', ');
+          // Prøv at få fat i nøgleord, fjern småord og specialtegn
+          themes = firstSentence.split(/[\s,]+/) 
+            .map(t => t.replace(/[^\w\sæøåÆØÅ-]/gi, '').toLowerCase())
+            .filter(t => t.length > 3 && !['det', 'er', 'en', 'og', 'den', 'til', 'som'].includes(t)) // Undgå meget generiske ord
+            .slice(0, 5) // Tag max 5 temaer
+            .join(', ');
         }
-        if (!themes) {
-            themes = firstSentence || result.summary.substring(0, 100);
+        if (!themes && result.summary.length > 0) { // Fallback hvis første sætning ikke gav gode temaer
+            themes = result.summary.substring(0, Math.min(result.summary.length, 100)); // Tag op til 100 tegn af resuméet som temaer
         }
-        setIdentifiedThemes(themes);
+        setIdentifiedThemes(themes || "Generelle temaer");
         toast({ title: "Succes", description: "Transskription opsummeret." });
         await handleGenerateIdeas(currentTranscription, themes || result.summary);
       } else {
@@ -118,21 +140,22 @@ export default function SynapseScribblePage() {
         toast({ title: "Info", description: "Ingen temaer identificeret. Bruger fuld transskription til idéer.", variant: "default" });
     }
     setIsGeneratingIdeas(true);
-    setWhiteboardContent("");
+    setWhiteboardContent(""); // Nulstil før generering
     setGeneratedImageDataUri(null);
     setNewInsights("");
     try {
       const input: GenerateWhiteboardIdeasInput = {
         transcription: currentTranscription,
         identifiedThemes: currentThemes, 
-        currentWhiteboardContent: "", 
+        currentWhiteboardContent: "", // Start altid med tomt whiteboard for nye idéer
       };
       const result = await generateWhiteboardIdeas(input);
       setWhiteboardContent(result.refinedWhiteboardContent);
       toast({ title: "Succes", description: "Whiteboard-indhold opdateret med AI-idéer." });
       
+      // Forbered prompt til billedgenerering
       const imageGenPrompt = currentThemes.trim() || summary.substring(0, 150).trim() || "abstrakt visualisering af diskussion";
-      await handleGenerateImage(imageGenPrompt, currentTranscription);
+      await handleGenerateImage(imageGenPrompt, currentTranscription || summary);
 
     } catch (error) {
       console.error("Idégenereringsfejl:", error);
@@ -150,10 +173,13 @@ export default function SynapseScribblePage() {
   const handleGenerateImage = async (promptForImage: string, currentTranscriptionForInsights: string) => {
     if (!promptForImage.trim()) {
       toast({ title: "Info", description: "Ingen prompt til billedgenerering fundet. Skipper billedgenerering.", variant: "default" });
+      // Selvom vi skipper billedgenerering, kan vi stadig forsøge at generere indsigter, hvis vi har transskriptionen.
+      // Dog, flowet forventer imageDataUri. Vi kunne sende et tomt, eller simpelthen stoppe her.
+      // For nu stopper vi, da indsigtsgenerering er tænkt at bygge på BÅDE billede OG tekst.
       return;
     }
     setIsGeneratingImage(true);
-    setGeneratedImageDataUri(null);
+    setGeneratedImageDataUri(null); // Nulstil før generering
     setNewInsights("");
     try {
       const styledPrompt = `En simpel whiteboard-tegning eller skitse der illustrerer: ${promptForImage}. Brug primært sort tusch på hvid baggrund, eventuelt med få accentfarver i blå eller grøn. Stilen skal være minimalistisk og ligne noget, der hurtigt er tegnet på et whiteboard under et møde.`;
@@ -161,7 +187,8 @@ export default function SynapseScribblePage() {
       const result = await generateImage(input);
       setGeneratedImageDataUri(result.imageDataUri);
       toast({ title: "Succes", description: "Billede genereret." });
-      await handleGenerateInsights(result.imageDataUri, currentTranscriptionForInsights || summary);
+      // Kald generering af indsigter EFTER billedet er genereret
+      await handleGenerateInsights(result.imageDataUri, currentTranscriptionForInsights);
     } catch (error) {
       console.error("Billedgenereringsfejl:", error);
       const errorMessage = error instanceof Error ? error.message : "En ukendt fejl opstod.";
@@ -170,7 +197,7 @@ export default function SynapseScribblePage() {
         description: `Kunne ikke generere billede: ${errorMessage}`,
         variant: "destructive"
       });
-      setGeneratedImageDataUri(null);
+      setGeneratedImageDataUri(null); // Sørg for at rydde billedet ved fejl
     } finally {
       setIsGeneratingImage(false);
     }
@@ -182,7 +209,7 @@ export default function SynapseScribblePage() {
       return;
     }
     setIsGeneratingInsights(true);
-    setNewInsights("");
+    setNewInsights(""); // Nulstil før generering
     try {
       const input: GenerateInsightsInput = { imageDataUri, conversationContext };
       const result = await generateInsights(input);
@@ -201,12 +228,13 @@ export default function SynapseScribblePage() {
     }
   };
 
+  // Funktion til at bruge de genererede indsigter som ny transskription
   const handleUseInsights = (insights: string) => {
-    setTranscription(insights);
+    setTranscription(insights); // Sæt indsigter som ny transskription
     resetAIOutputs(); // Nulstiller summary, themes, whiteboard, image, newInsights
     toast({ 
       title: "Ny Samtale Startet", 
-      description: "Indsigter er indsat som ny samtale. Start AI-processen igen ved at optage eller redigere teksten." 
+      description: "Indsigter er indsat. Klik på 'Start AI Analyse med Tekst' for at behandle." 
     });
   };
   
@@ -242,6 +270,7 @@ export default function SynapseScribblePage() {
             isRecording={isRecording}
             setIsRecording={setIsRecording}
             onAudioTranscription={handleAudioTranscription}
+            onStartAnalysisFromText={handleStartAnalysisFromText} // Ny prop
             isTranscribing={isTranscribing}
             isSummarizing={isSummarizing}
             isGeneratingIdeas={isGeneratingIdeas}
@@ -256,3 +285,5 @@ export default function SynapseScribblePage() {
     </div>
   );
 }
+
+    

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { AppHeader } from "@/components/app-header";
 import { WhiteboardPanel } from "@/components/whiteboard-panel";
 import { ControlsPanel } from "@/components/controls-panel";
+import { ResultsPanel } from "@/components/results-panel";
 import { useToast } from "@/hooks/use-toast";
 import { summarizeTranscription } from '@/ai/flows/summarize-transcription';
 import type { SummarizeTranscriptionInput } from '@/ai/flows/summarize-transcription';
@@ -45,20 +46,35 @@ export default function SynapseScribblePage() {
     setNewInsights("");
   };
 
+  const getAIUserErrorMessage = (error: unknown, baseMessage: string): string => {
+    if (error instanceof Error) {
+      const errorMessageLowerCase = error.message.toLowerCase();
+      if (error.message.includes("503") || 
+          errorMessageLowerCase.includes("service unavailable") || 
+          errorMessageLowerCase.includes("overloaded") ||
+          errorMessageLowerCase.includes("model is overloaded")) {
+        return "AI-tjenesten (Google) er midlertidigt overbelastet eller utilgængelig. Prøv venligst igen om et øjeblik.";
+      }
+      return `${baseMessage}: ${error.message}`;
+    }
+    return `${baseMessage}: En ukendt fejl opstod.`;
+  };
+
   const handleAudioTranscription = async (audioDataUri: string) => {
     setIsTranscribing(true);
-    setTranscription("Behandler lydoptagelse for transskription..."); // Initial placeholder
+    setTranscription("Behandler lydoptagelse for transskription..."); 
     resetAIOutputs(); 
     try {
       const input: TranscribeAudioInput = { audioDataUri };
       const result: TranscribeAudioOutput = await transcribeAudio(input);
-      setTranscription(result.transcription); // Sæt den faktiske transskription
+      setTranscription(result.transcription); 
       toast({ title: "Succes", description: "Automatisk transskription fuldført (simuleret)." });
       await handleSummarize(result.transcription);
     } catch (error) {
       console.error("Fejl under (simuleret) transskription:", error);
-      toast({ title: "Fejl", description: "Kunne ikke transskribere lyden (simuleret).", variant: "destructive" });
-      setTranscription(""); // Ryd transskription ved fejl
+      const userMessage = getAIUserErrorMessage(error, "Kunne ikke transskribere lyden (simuleret)");
+      toast({ title: "Fejl ved transskription", description: userMessage, variant: "destructive" });
+      setTranscription(""); 
     } finally {
       setIsTranscribing(false);
     }
@@ -69,9 +85,7 @@ export default function SynapseScribblePage() {
       toast({ title: "Info", description: "Transskription er tom. Kan ikke starte analyse.", variant: "default" });
       return;
     }
-    // Nulstil tidligere AI resultater, før ny analyse starter
     resetAIOutputs(); 
-    // Sikrer at transskriptionen er den brugeren ser, hvis de har redigeret den.
     setTranscription(currentTranscription); 
     toast({ title: "AI Analyse Startet", description: "Behandler den angivne tekst..." });
     await handleSummarize(currentTranscription);
@@ -83,9 +97,6 @@ export default function SynapseScribblePage() {
       return;
     }
     setIsSummarizing(true);
-    // Nulstil output fra tidligere kørsler, *undtagen* transskriptionen, hvis den er inputtet.
-    // resetAIOutputs() er allerede kaldt hvis det er en ny cyklus. 
-    // Her nulstiller vi specifikt det der kommer *efter* transskription.
     setSummary(""); 
     setIdentifiedThemes("");
     setWhiteboardContent("");
@@ -97,19 +108,17 @@ export default function SynapseScribblePage() {
 
       if (result && typeof result.summary === 'string' && result.summary.trim() !== "") {
         setSummary(result.summary);
-        // Udled temaer fra resuméet
         const firstSentence = result.summary.split('. ')[0];
         let themes = "";
         if (firstSentence) {
-          // Prøv at få fat i nøgleord, fjern småord og specialtegn
           themes = firstSentence.split(/[\s,]+/) 
             .map(t => t.replace(/[^\w\sæøåÆØÅ-]/gi, '').toLowerCase())
-            .filter(t => t.length > 3 && !['det', 'er', 'en', 'og', 'den', 'til', 'som'].includes(t)) // Undgå meget generiske ord
-            .slice(0, 5) // Tag max 5 temaer
+            .filter(t => t.length > 3 && !['det', 'er', 'en', 'og', 'den', 'til', 'som'].includes(t)) 
+            .slice(0, 5) 
             .join(', ');
         }
-        if (!themes && result.summary.length > 0) { // Fallback hvis første sætning ikke gav gode temaer
-            themes = result.summary.substring(0, Math.min(result.summary.length, 100)); // Tag op til 100 tegn af resuméet som temaer
+        if (!themes && result.summary.length > 0) { 
+            themes = result.summary.substring(0, Math.min(result.summary.length, 100)); 
         }
         setIdentifiedThemes(themes || "Generelle temaer");
         toast({ title: "Succes", description: "Transskription opsummeret." });
@@ -120,10 +129,10 @@ export default function SynapseScribblePage() {
       }
     } catch (error) {
       console.error("Opsummeringsfejl (catch block):", error);
-      const errorMessage = error instanceof Error ? error.message : "En ukendt fejl opstod under opsummering.";
+      const userMessage = getAIUserErrorMessage(error, "Kunne ikke opsummere transskription");
       toast({ 
         title: "Fejl ved opsummering", 
-        description: `Kunne ikke opsummere transskription: ${errorMessage}`, 
+        description: userMessage, 
         variant: "destructive" 
       });
     } finally {
@@ -134,37 +143,44 @@ export default function SynapseScribblePage() {
   const handleGenerateIdeas = async (currentTranscription: string, currentThemes: string) => {
     if (!currentTranscription.trim()) {
       toast({ title: "Fejl", description: "Transskription er tom for idégenerering.", variant: "destructive" });
+      // Avoid proceeding if essential input is missing
+      setIsGeneratingIdeas(false); // Ensure loading state is reset
+      await handleGenerateImage("", currentTranscription || summary); // Call with empty prompt to allow insight gen
       return;
     }
     if (!currentThemes.trim()) { 
         toast({ title: "Info", description: "Ingen temaer identificeret. Bruger fuld transskription til idéer.", variant: "default" });
     }
     setIsGeneratingIdeas(true);
-    setWhiteboardContent(""); // Nulstil før generering
+    setWhiteboardContent(""); 
     setGeneratedImageDataUri(null);
     setNewInsights("");
+    let refinedWhiteboardContent = "";
     try {
       const input: GenerateWhiteboardIdeasInput = {
         transcription: currentTranscription,
         identifiedThemes: currentThemes, 
-        currentWhiteboardContent: "", // Start altid med tomt whiteboard for nye idéer
+        currentWhiteboardContent: "", 
       };
       const result = await generateWhiteboardIdeas(input);
-      setWhiteboardContent(result.refinedWhiteboardContent);
+      refinedWhiteboardContent = result.refinedWhiteboardContent;
+      setWhiteboardContent(refinedWhiteboardContent);
       toast({ title: "Succes", description: "Whiteboard-indhold opdateret med AI-idéer." });
       
-      // Forbered prompt til billedgenerering
-      const imageGenPrompt = currentThemes.trim() || summary.substring(0, 150).trim() || "abstrakt visualisering af diskussion";
-      await handleGenerateImage(imageGenPrompt, currentTranscription || summary);
+      const imageGenPromptInput = currentThemes.trim() || summary.substring(0, 150).trim() || "abstrakt visualisering af diskussion";
+      await handleGenerateImage(imageGenPromptInput, currentTranscription || summary);
 
     } catch (error) {
       console.error("Idégenereringsfejl:", error);
-      const errorMessage = error instanceof Error ? error.message : "En ukendt fejl opstod.";
+      const userMessage = getAIUserErrorMessage(error, "Kunne ikke generere whiteboard-idéer");
       toast({ 
         title: "Fejl ved idégenerering", 
-        description: `Kunne ikke generere whiteboard-idéer: ${errorMessage}`, 
+        description: userMessage, 
         variant: "destructive" 
       });
+      // Even if ideas fail, try to generate image and insights with what we have
+      const imageGenPromptInput = currentThemes.trim() || summary.substring(0, 150).trim() || "abstrakt visualisering af diskussion";
+      await handleGenerateImage(imageGenPromptInput, currentTranscription || summary);
     } finally {
       setIsGeneratingIdeas(false);
     }
@@ -172,52 +188,59 @@ export default function SynapseScribblePage() {
   
   const handleGenerateImage = async (promptForImage: string, currentTranscriptionForInsights: string) => {
     if (!promptForImage.trim()) {
-      toast({ title: "Info", description: "Ingen prompt til billedgenerering fundet. Skipper billedgenerering.", variant: "default" });
+      toast({ title: "Info", description: "Ingen prompt til billedgenerering fundet. Fortsætter uden billede.", variant: "default" });
+      // Attempt to generate insights even without an image if the prompt is empty
+      await handleGenerateInsights("", currentTranscriptionForInsights || summary);
       return;
     }
     setIsGeneratingImage(true);
-    setGeneratedImageDataUri(null); // Nulstil før generering
+    setGeneratedImageDataUri(null); 
     setNewInsights("");
+    let imageDataUriForInsights = "";
     try {
       const styledPrompt = `En simpel whiteboard-tegning eller skitse der illustrerer: ${promptForImage}. Generer billedet i et widescreen 16:9 format. Brug primært sort tusch på hvid baggrund, eventuelt med få accentfarver i blå eller grøn. Stilen skal være minimalistisk og ligne noget, der hurtigt er tegnet på et whiteboard under et møde.`;
       const input: GenerateImageInput = { prompt: styledPrompt };
       const result = await generateImage(input);
+      imageDataUriForInsights = result.imageDataUri;
       setGeneratedImageDataUri(result.imageDataUri);
       toast({ title: "Succes", description: "Billede genereret." });
-      // Kald generering af indsigter EFTER billedet er genereret
-      await handleGenerateInsights(result.imageDataUri, currentTranscriptionForInsights);
     } catch (error) {
       console.error("Billedgenereringsfejl:", error);
-      const errorMessage = error instanceof Error ? error.message : "En ukendt fejl opstod.";
+      const userMessage = getAIUserErrorMessage(error, "Kunne ikke generere billede");
       toast({
         title: "Fejl ved billedgenerering",
-        description: `Kunne ikke generere billede: ${errorMessage}`,
+        description: userMessage,
         variant: "destructive"
       });
-      setGeneratedImageDataUri(null); // Sørg for at rydde billedet ved fejl
+      setGeneratedImageDataUri(null); 
     } finally {
       setIsGeneratingImage(false);
+      // Call generate insights regardless of image generation success/failure
+      await handleGenerateInsights(imageDataUriForInsights, currentTranscriptionForInsights || summary);
     }
   };
 
   const handleGenerateInsights = async (imageDataUri: string, conversationContext: string) => {
-    if (!imageDataUri || !conversationContext.trim()) {
-      toast({ title: "Info", description: "Manglende billede eller samtale kontekst. Kan ikke generere indsigter.", variant: "default" });
+    if (!conversationContext.trim()) { // Image can be empty, but context is needed
+      toast({ title: "Info", description: "Manglende samtalekontekst. Kan ikke generere indsigter.", variant: "default" });
       return;
     }
     setIsGeneratingInsights(true);
-    setNewInsights(""); // Nulstil før generering
+    setNewInsights(""); 
     try {
-      const input: GenerateInsightsInput = { imageDataUri, conversationContext };
+      const input: GenerateInsightsInput = { 
+        imageDataUri: imageDataUri, // Can be empty string if image failed
+        conversationContext 
+      };
       const result = await generateInsights(input);
       setNewInsights(result.insightsText);
       toast({ title: "Succes", description: "Nye AI-indsigter genereret." });
     } catch (error) {
       console.error("Fejl ved generering af indsigter:", error);
-      const errorMessage = error instanceof Error ? error.message : "En ukendt fejl opstod.";
+      const userMessage = getAIUserErrorMessage(error, "Kunne ikke generere nye indsigter");
       toast({
         title: "Fejl ved Indsigtsgenerering",
-        description: `Kunne ikke generere nye indsigter: ${errorMessage}`,
+        description: userMessage,
         variant: "destructive"
       });
     } finally {
@@ -225,10 +248,9 @@ export default function SynapseScribblePage() {
     }
   };
 
-  // Funktion til at bruge de genererede indsigter som ny transskription
   const handleUseInsights = (insights: string) => {
-    setTranscription(insights); // Sæt indsigter som ny transskription
-    resetAIOutputs(); // Nulstiller summary, themes, whiteboard, image, newInsights
+    setTranscription(insights); 
+    resetAIOutputs(); 
     toast({ 
       title: "Ny Samtale Startet", 
       description: "Indsigter er indsat. Klik på 'Start AI Analyse med Tekst' for at behandle." 
@@ -248,39 +270,43 @@ export default function SynapseScribblePage() {
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <AppHeader />
-      <main className="flex-1 flex flex-col md:flex-row gap-4 p-4 container mx-auto overflow-hidden">
-        <div className="md:w-1/2 lg:w-3/5 h-full flex flex-col">
-          <WhiteboardPanel
-            whiteboardContent={whiteboardContent}
-            setWhiteboardContent={setWhiteboardContent}
-            identifiedThemes={identifiedThemes}
-            generatedImageDataUri={generatedImageDataUri}
-            isGeneratingImage={isGeneratingImage}
-            currentLoadingState={currentLoadingState()}
-          />
+      <main className="flex-1 flex flex-col gap-4 p-4 container mx-auto">
+        <div className="flex flex-col md:flex-row gap-4 flex-grow md:max-h-[calc(100vh-200px)]"> {/* Juster max-højden efter behov */}
+          <div className="md:w-1/2 lg:w-3/5 h-full flex flex-col">
+            <WhiteboardPanel
+              whiteboardContent={whiteboardContent}
+              setWhiteboardContent={setWhiteboardContent}
+              generatedImageDataUri={generatedImageDataUri}
+              isGeneratingImage={isGeneratingImage}
+              currentLoadingState={currentLoadingState()}
+            />
+          </div>
+          <div className="md:w-1/2 lg:w-2/5 h-full flex flex-col">
+            <ControlsPanel
+              transcription={transcription}
+              setTranscription={setTranscription}
+              isRecording={isRecording}
+              setIsRecording={setIsRecording}
+              onAudioTranscription={handleAudioTranscription}
+              onStartAnalysisFromText={handleStartAnalysisFromText}
+              isAnyAIProcessRunning={isTranscribing || isSummarizing || isGeneratingIdeas || isGeneratingImage || isGeneratingInsights}
+              currentLoadingStateForControls={currentLoadingState()}
+            />
+          </div>
         </div>
-        <div className="md:w-1/2 lg:w-2/5 h-full flex flex-col">
-          <ControlsPanel
-            transcription={transcription}
-            setTranscription={setTranscription}
+        <div className="mt-4">
+          <ResultsPanel
             summary={summary}
-            isRecording={isRecording}
-            setIsRecording={setIsRecording}
-            onAudioTranscription={handleAudioTranscription}
-            onStartAnalysisFromText={handleStartAnalysisFromText} // Ny prop
-            isTranscribing={isTranscribing}
-            isSummarizing={isSummarizing}
-            isGeneratingIdeas={isGeneratingIdeas}
-            isGeneratingImage={isGeneratingImage}
-            currentLoadingStateForControls={currentLoadingState()}
+            identifiedThemes={identifiedThemes}
             newInsights={newInsights}
+            isSummarizing={isSummarizing}
             isGeneratingInsights={isGeneratingInsights}
             onUseInsights={handleUseInsights}
+            isAnyAIProcessRunning={isTranscribing || isSummarizing || isGeneratingIdeas || isGeneratingImage || isGeneratingInsights || isRecording}
           />
         </div>
       </main>
     </div>
   );
 }
-
     

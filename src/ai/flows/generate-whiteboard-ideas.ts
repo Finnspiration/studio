@@ -49,13 +49,14 @@ const prompt = ai.definePrompt({
   De overordnede temaer identificeret fra samtalen er: {{{identifiedThemes}}}.
   
   Brug transskriptionen som den primære kilde og temaerne som vejledning til at generere nye, relevante idéer eller uddybe eksisterende koncepter.
-  Forfin det nuværende whiteboard-indhold (hvis nogen) og inkorporer disse nye idéer.
   Sigt efter at skabe et whiteboard, der er kortfattet, handlingsorienteret og visuelt tiltalende i sin struktur (brug f.eks. punktopstillinger, korte sætninger).
+  Generer mindst 3-5 punkter eller en kort opsummerende tekst til whiteboardet.
+  Hvis inputtet (transskription/temaer) ikke giver grundlag for meningsfulde whiteboard-idéer, svar da med: "Ingen specifikke whiteboard-idéer kunne udledes fra samtalen."
 
-  Nuværende whiteboard-indhold (kan være tomt): 
+  Nuværende whiteboard-indhold (kan være tomt, du skal generere nyt baseret på transskription og temaer): 
   {{{currentWhiteboardContent}}}
 
-  Baseret på ovenstående, generer det forfinede whiteboard-indhold (på dansk):`,
+  Generer det forfinede whiteboard-indhold (på dansk) baseret på transskriptionen og temaerne:`,
 });
 
 const generateWhiteboardIdeasFlow = ai.defineFlow(

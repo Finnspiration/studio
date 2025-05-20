@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 interface WhiteboardPanelProps {
   whiteboardContent: string;
   setWhiteboardContent: Dispatch<SetStateAction<string>>;
-  identifiedThemes: string; // Added identifiedThemes prop
+  identifiedThemes: string;
   generatedImageDataUri: string | null;
   isGeneratingImage: boolean;
   currentLoadingState: string | null;
@@ -21,7 +21,7 @@ interface WhiteboardPanelProps {
 export function WhiteboardPanel({ 
   whiteboardContent, 
   setWhiteboardContent, 
-  identifiedThemes, // Destructure identifiedThemes
+  identifiedThemes,
   generatedImageDataUri, 
   isGeneratingImage,
   currentLoadingState
@@ -44,7 +44,7 @@ export function WhiteboardPanel({
         )}
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-4 overflow-y-auto">
-        <div className="flex-1 flex flex-col min-h-[250px]">
+        <div className="flex flex-col min-h-[250px]"> {/* Fjernet flex-1 her */}
           <Label htmlFor="whiteboard" className="mb-2 text-sm font-medium">Whiteboard Indhold (AI genereret, kan redigeres)</Label>
           <Textarea
             id="whiteboard"
@@ -55,7 +55,7 @@ export function WhiteboardPanel({
             }
             value={whiteboardContent}
             onChange={(e) => setWhiteboardContent(e.target.value)}
-            className="flex-1 resize-none text-base bg-card"
+            className="flex-1 resize-none text-base bg-card" // Textarea har stadig flex-1 for at fylde sin parent
             aria-label="Whiteboard indholdsområde"
             disabled={isGeneratingWhiteboard || isGeneratingImage}
           />
@@ -64,7 +64,7 @@ export function WhiteboardPanel({
         { (identifiedThemes || isSummarizingThemes) && (
           <div className="mt-2">
             <Label className="mb-2 text-sm font-medium">AI Identificerede Temaer</Label>
-            {isSummarizingThemes && !identifiedThemes ? ( // Show skeleton only if summarizing AND themes not yet available
+            {isSummarizingThemes && !identifiedThemes ? ( 
               <Skeleton className="h-10 w-full rounded-md" />
             ) : identifiedThemes ? (
               <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground break-words max-h-32 overflow-y-auto">
@@ -90,8 +90,9 @@ export function WhiteboardPanel({
               <Image 
                 src={generatedImageDataUri} 
                 alt="AI genereret billede" 
-                layout="fill"
-                objectFit="contain"
+                fill // Brug fill i stedet for layout="fill" og objectFit="contain"
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Tilføj sizes for optimering
+                style={{ objectFit: 'contain' }} // Brug style for objectFit
                 className="p-1"
                 data-ai-hint="generated art"
               />
@@ -108,6 +109,3 @@ export function WhiteboardPanel({
     </Card>
   );
 }
-
-
-    

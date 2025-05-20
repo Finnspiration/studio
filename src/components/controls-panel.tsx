@@ -6,8 +6,9 @@ import { useRef, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mic, Square, BookText, Sparkles, Loader2, FileAudio } from 'lucide-react';
+import { Mic, Square, BookText, Sparkles, Loader2, Image as ImageIcon } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { transcribeAudio } from '@/ai/flows/transcribe-audio-flow';
 import type { TranscribeAudioInput } from '@/ai/flows/transcribe-audio-flow';
@@ -24,6 +25,10 @@ interface ControlsPanelProps {
   isGeneratingIdeas: boolean;
   onSummarize: () => Promise<void>;
   onGenerateIdeas: () => Promise<void>;
+  imagePrompt: string;
+  setImagePrompt: Dispatch<SetStateAction<string>>;
+  onGenerateImage: () => Promise<void>;
+  isGeneratingImage: boolean;
 }
 
 export function ControlsPanel({
@@ -38,6 +43,10 @@ export function ControlsPanel({
   isGeneratingIdeas,
   onSummarize,
   onGenerateIdeas,
+  imagePrompt,
+  setImagePrompt,
+  onGenerateImage,
+  isGeneratingImage,
 }: ControlsPanelProps) {
   const { toast } = useToast();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -46,13 +55,11 @@ export function ControlsPanel({
 
   const handleRecordToggle = async () => {
     if (isRecording) {
-      // Stop recording
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.stop();
       }
       setIsRecording(false);
     } else {
-      // Start recording
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
@@ -67,8 +74,6 @@ export function ControlsPanel({
         mediaRecorderRef.current.onstop = async () => {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           audioChunksRef.current = [];
-          
-          // Stop alle spor for at frigive mikrofonen
           stream.getTracks().forEach(track => track.stop());
           
           toast({ title: "Succes", description: "Lydoptagelse afsluttet. Starter transskription..." });
@@ -88,7 +93,7 @@ export function ControlsPanel({
           } catch (error) {
             console.error("Fejl under (simuleret) transskription:", error);
             toast({ title: "Fejl", description: "Kunne ikke transskribere lyden (simuleret). Prøv at indtaste manuelt.", variant: "destructive" });
-            setTranscription(""); // Ryd til manuel indtastning ved fejl
+            setTranscription("");
           } finally {
             setIsTranscribing(false);
           }
@@ -105,7 +110,7 @@ export function ControlsPanel({
     }
   };
 
-  const isBusy = isRecording || isTranscribing || isSummarizing || isGeneratingIdeas;
+  const isBusy = isRecording || isTranscribing || isSummarizing || isGeneratingIdeas || isGeneratingImage;
 
   return (
     <Card className="flex-1 flex flex-col h-full shadow-lg">
@@ -114,7 +119,7 @@ export function ControlsPanel({
           AI Kontrol & Analyse
         </CardTitle>
         <CardDescription>
-          Optag lyd, få den automatisk transskriberet (simuleret), opsummer og forbedr whiteboard-indhold.
+          Optag lyd, transskriber (simuleret), opsummer, generer idéer og billeder.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-6 overflow-y-auto">
@@ -127,7 +132,7 @@ export function ControlsPanel({
               variant="outline" 
               size="sm" 
               aria-label={isRecording ? "Stop Optagelse" : "Start Optagelse"}
-              disabled={isTranscribing || isSummarizing || isGeneratingIdeas}
+              disabled={isBusy && !isRecording} // Allow stopping recording even if busy
             >
               {isRecording ? <Square className="mr-2 h-4 w-4 animate-pulse text-red-500" /> : <Mic className="mr-2 h-4 w-4" />}
               {isRecording ? 'Stopper Optagelse...' : 'Start Optagelse'}
@@ -145,6 +150,7 @@ export function ControlsPanel({
             className="min-h-[100px] resize-none text-base"
             aria-label="Transskriptionsinputområde"
             readOnly={isRecording || isTranscribing}
+            disabled={isBusy && !isRecording && !isTranscribing}
           />
            {isTranscribing && (
             <div className="flex items-center text-sm text-muted-foreground">
@@ -195,6 +201,29 @@ export function ControlsPanel({
           >
             {isGeneratingIdeas ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
             Generer Whiteboard-idéer
+          </Button>
+        </div>
+
+        {/* Billedgenereringssektion */}
+        <div className="space-y-2">
+          <Label htmlFor="imagePrompt" className="text-sm font-medium">Prompt til Billedgenerering</Label>
+          <Input
+            id="imagePrompt"
+            placeholder="Beskriv det billede, du vil generere (f.eks. 'En glad kat på en grøn mark')"
+            value={imagePrompt}
+            onChange={(e) => setImagePrompt(e.target.value)}
+            className="text-base"
+            aria-label="Prompt til billedgenerering"
+            disabled={isBusy}
+          />
+          <Button 
+            onClick={onGenerateImage} 
+            disabled={isBusy || !imagePrompt.trim()} 
+            className="w-full sm:w-auto" 
+            aria-label="Generer Billede"
+          >
+            {isGeneratingImage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
+            Generer Billede
           </Button>
         </div>
       </CardContent>

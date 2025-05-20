@@ -10,6 +10,8 @@ import { summarizeTranscription } from '@/ai/flows/summarize-transcription';
 import type { SummarizeTranscriptionInput } from '@/ai/flows/summarize-transcription';
 import { generateWhiteboardIdeas } from '@/ai/flows/generate-whiteboard-ideas';
 import type { GenerateWhiteboardIdeasInput } from '@/ai/flows/generate-whiteboard-ideas';
+import { generateImage } from '@/ai/flows/generate-image-flow';
+import type { GenerateImageInput } from '@/ai/flows/generate-image-flow';
 
 export default function SynapseScribblePage() {
   const [whiteboardContent, setWhiteboardContent] = useState<string>("");
@@ -20,6 +22,10 @@ export default function SynapseScribblePage() {
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isSummarizing, setIsSummarizing] = useState<boolean>(false);
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState<boolean>(false);
+  
+  const [imagePrompt, setImagePrompt] = useState<string>("");
+  const [generatedImageDataUri, setGeneratedImageDataUri] = useState<string | null>(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
 
   const { toast } = useToast();
 
@@ -35,14 +41,13 @@ export default function SynapseScribblePage() {
 
       if (result && typeof result.summary === 'string' && result.summary.trim() !== "") {
         setSummary(result.summary);
-        // Udled temaer: Brug første sætning, op til 5 komma-separerede elementer, eller fald tilbage på hele resuméet.
         const firstSentence = result.summary.split('. ')[0];
         let themes = "";
         if (firstSentence) {
           themes = firstSentence.split(',').slice(0, 5).map(t => t.trim()).filter(t => t).join(', ');
         }
-        if (!themes) { // Fallback hvis ingen komma-separerede temaer blev fundet i første sætning
-            themes = firstSentence || result.summary; // Brug første sætning, eller hele resuméet hvis ingen sætning.
+        if (!themes) {
+            themes = firstSentence || result.summary;
         }
         setIdentifiedThemes(themes);
         toast({ title: "Succes", description: "Transskription opsummeret." });
@@ -90,12 +95,38 @@ export default function SynapseScribblePage() {
       console.error("Idégenereringsfejl:", error);
       const errorMessage = error instanceof Error ? error.message : "En ukendt fejl opstod.";
       toast({ 
-        title: "Fejl ved idégGenerering", 
+        title: "Fejl ved idégenerering", 
         description: `Kunne ikke generere whiteboard-idéer: ${errorMessage}`, 
         variant: "destructive" 
       });
     } finally {
       setIsGeneratingIdeas(false);
+    }
+  };
+
+  const handleGenerateImage = async () => {
+    if (!imagePrompt.trim()) {
+      toast({ title: "Fejl", description: "Billedprompt er tom.", variant: "destructive" });
+      return;
+    }
+    setIsGeneratingImage(true);
+    setGeneratedImageDataUri(null); // Ryd tidligere billede
+    try {
+      const input: GenerateImageInput = { prompt: imagePrompt };
+      const result = await generateImage(input);
+      setGeneratedImageDataUri(result.imageDataUri);
+      toast({ title: "Succes", description: "Billede genereret." });
+    } catch (error) {
+      console.error("Billedgenereringsfejl:", error);
+      const errorMessage = error instanceof Error ? error.message : "En ukendt fejl opstod.";
+      toast({
+        title: "Fejl ved billedgenerering",
+        description: `Kunne ikke generere billede: ${errorMessage}`,
+        variant: "destructive"
+      });
+      setGeneratedImageDataUri(null);
+    } finally {
+      setIsGeneratingImage(false);
     }
   };
 
@@ -108,6 +139,8 @@ export default function SynapseScribblePage() {
             whiteboardContent={whiteboardContent}
             setWhiteboardContent={setWhiteboardContent}
             identifiedThemes={identifiedThemes}
+            generatedImageDataUri={generatedImageDataUri}
+            isGeneratingImage={isGeneratingImage}
           />
         </div>
         <div className="md:w-1/2 lg:w-2/5 h-full flex flex-col">
@@ -123,6 +156,10 @@ export default function SynapseScribblePage() {
             isGeneratingIdeas={isGeneratingIdeas}
             onSummarize={handleSummarize}
             onGenerateIdeas={handleGenerateIdeas}
+            imagePrompt={imagePrompt}
+            setImagePrompt={setImagePrompt}
+            onGenerateImage={handleGenerateImage}
+            isGeneratingImage={isGeneratingImage}
           />
         </div>
       </main>

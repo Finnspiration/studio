@@ -1,7 +1,8 @@
+
 // src/ai/flows/generate-whiteboard-ideas.ts
 'use server';
 /**
- * @fileOverview A flow for generating and refining whiteboard content based on voice prompts and identified themes.
+ * @fileOverview A flow for generating and refining whiteboard content based on a full transcription and identified themes.
  *
  * - generateWhiteboardIdeas - A function that handles the generation and refinement of whiteboard ideas.
  * - GenerateWhiteboardIdeasInput - The input type for the generateWhiteboardIdeas function.
@@ -12,12 +13,12 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const GenerateWhiteboardIdeasInputSchema = z.object({
-  voicePrompt: z
+  transcription: z // Ændret fra voicePrompt
     .string()
-    .describe('Stemmebeskeden optaget fra brugeren, som en streng.'),
+    .describe('Den fulde transskription af samtalen.'),
   identifiedThemes: z
     .string()
-    .describe('De identificerede temaer fra samtaleanalysen.'),
+    .describe('De identificerede temaer fra samtaleanalysen (opsummeringen).'),
   currentWhiteboardContent: z
     .string()
     .optional()
@@ -28,7 +29,7 @@ export type GenerateWhiteboardIdeasInput = z.infer<typeof GenerateWhiteboardIdea
 const GenerateWhiteboardIdeasOutputSchema = z.object({
   refinedWhiteboardContent: z
     .string()
-    .describe('Det forfinede indhold til whiteboardet, der inkorporerer nye idéer og temaer. Svar på dansk.'),
+    .describe('Det forfinede indhold til whiteboardet, der inkorporerer nye idéer baseret på transskriptionen og temaerne. Svar på dansk.'),
 });
 export type GenerateWhiteboardIdeasOutput = z.infer<typeof GenerateWhiteboardIdeasOutputSchema>;
 
@@ -40,16 +41,21 @@ const prompt = ai.definePrompt({
   name: 'generateWhiteboardIdeasPrompt',
   input: {schema: GenerateWhiteboardIdeasInputSchema},
   output: {schema: GenerateWhiteboardIdeasOutputSchema},
-  prompt: `Du er en AI-assistent, der hjælper med at forfine og generere nye idéer til et digitalt whiteboard. Svar altid på dansk.
+  prompt: `Du er en AI-assistent, der hjælper med at generere og forfine idéer til et digitalt whiteboard baseret på en samtale. Svar altid på dansk.
 
-  Whiteboardet er i øjeblikket tematiseret omkring følgende emner: {{{identifiedThemes}}}.
-  Brugeren har givet følgende stemmebesked: {{{voicePrompt}}}.
+  Den fulde transskription af samtalen er:
+  {{{transcription}}}
 
-  Forfin det nuværende whiteboard-indhold (hvis nogen) og inkorporer nye idéer baseret på de identificerede temaer og stemmebeskeden. Hold whiteboard-indholdet kortfattet og visuelt tiltalende.
+  De overordnede temaer identificeret fra samtalen er: {{{identifiedThemes}}}.
+  
+  Brug transskriptionen som den primære kilde og temaerne som vejledning til at generere nye, relevante idéer eller uddybe eksisterende koncepter.
+  Forfin det nuværende whiteboard-indhold (hvis nogen) og inkorporer disse nye idéer.
+  Sigt efter at skabe et whiteboard, der er kortfattet, handlingsorienteret og visuelt tiltalende i sin struktur (brug f.eks. punktopstillinger, korte sætninger).
 
-  Nuværende whiteboard-indhold: {{{currentWhiteboardContent}}}
+  Nuværende whiteboard-indhold (kan være tomt): 
+  {{{currentWhiteboardContent}}}
 
-  Forfinet whiteboard-indhold (på dansk):`,
+  Baseret på ovenstående, generer det forfinede whiteboard-indhold (på dansk):`,
 });
 
 const generateWhiteboardIdeasFlow = ai.defineFlow(
@@ -63,3 +69,5 @@ const generateWhiteboardIdeasFlow = ai.defineFlow(
     return output!;
   }
 );
+
+    

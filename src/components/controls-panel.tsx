@@ -2,56 +2,63 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from 'react';
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
+// import { Input } from "@/components/ui/input"; // Fjernet da billedprompt ikke længere manuelt indtastes her
 import { Label } from "@/components/ui/label";
-import { Mic, Square, BookText, Sparkles, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Mic, Square, Loader2, Info } from 'lucide-react'; // Image-ikon fjernet for nu
 import { useToast } from "@/hooks/use-toast";
-import { transcribeAudio } from '@/ai/flows/transcribe-audio-flow';
-import type { TranscribeAudioInput } from '@/ai/flows/transcribe-audio-flow';
+// TranscribeAudio flow importeres ikke her, da det kaldes fra page.tsx
 
 interface ControlsPanelProps {
   transcription: string;
   setTranscription: Dispatch<SetStateAction<string>>;
   summary: string;
-  voicePrompt: string;
-  setVoicePrompt: Dispatch<SetStateAction<string>>;
   isRecording: boolean;
   setIsRecording: Dispatch<SetStateAction<boolean>>;
+  onAudioTranscription: (audioDataUri: string) => Promise<void>;
+  isTranscribing: boolean;
   isSummarizing: boolean;
   isGeneratingIdeas: boolean;
-  onSummarize: () => Promise<void>;
-  onGenerateIdeas: () => Promise<void>;
-  imagePrompt: string;
-  setImagePrompt: Dispatch<SetStateAction<string>>;
-  onGenerateImage: () => Promise<void>;
-  isGeneratingImage: boolean;
+  isGeneratingImage: boolean; // Bruges til at deaktivere record knap
 }
 
 export function ControlsPanel({
   transcription,
   setTranscription,
   summary,
-  voicePrompt,
-  setVoicePrompt,
   isRecording,
   setIsRecording,
+  onAudioTranscription,
+  isTranscribing,
   isSummarizing,
   isGeneratingIdeas,
-  onSummarize,
-  onGenerateIdeas,
-  imagePrompt,
-  setImagePrompt,
-  onGenerateImage,
   isGeneratingImage,
 }: ControlsPanelProps) {
   const { toast } = useToast();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
+  
+  // Viser en samlet status for AI processer
+  const [currentProcessMessage, setCurrentProcessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isTranscribing) {
+      setCurrentProcessMessage("Transskriberer optagelse...");
+    } else if (isSummarizing) {
+      setCurrentProcessMessage("Opsummerer transskription...");
+    } else if (isGeneratingIdeas) {
+      setCurrentProcessMessage("Genererer whiteboard idéer...");
+    } else if (isGeneratingImage) {
+      setCurrentProcessMessage("Genererer billede..."); // Selvom UI for dette er skjult
+    }
+     else {
+      setCurrentProcessMessage(null);
+    }
+  }, [isTranscribing, isSummarizing, isGeneratingIdeas, isGeneratingImage]);
+
 
   const handleRecordToggle = async () => {
     if (isRecording) {
@@ -76,32 +83,19 @@ export function ControlsPanel({
           audioChunksRef.current = [];
           stream.getTracks().forEach(track => track.stop());
           
-          toast({ title: "Succes", description: "Lydoptagelse afsluttet. Starter transskription..." });
-          setIsTranscribing(true);
-          setTranscription("Behandler lydoptagelse for transskription...");
-
-          try {
-            const reader = new FileReader();
-            reader.readAsDataURL(audioBlob);
-            reader.onloadend = async () => {
-              const base64Audio = reader.result as string;
-              const input: TranscribeAudioInput = { audioDataUri: base64Audio };
-              const result = await transcribeAudio(input);
-              setTranscription(result.transcription);
-              toast({ title: "Succes", description: "Automatisk transskription fuldført (simuleret)." });
-            };
-          } catch (error) {
-            console.error("Fejl under (simuleret) transskription:", error);
-            toast({ title: "Fejl", description: "Kunne ikke transskribere lyden (simuleret). Prøv at indtaste manuelt.", variant: "destructive" });
-            setTranscription("");
-          } finally {
-            setIsTranscribing(false);
-          }
+          toast({ title: "Optagelse Færdig", description: "Starter automatisk AI-behandling..." });
+          
+          const reader = new FileReader();
+          reader.readAsDataURL(audioBlob);
+          reader.onloadend = async () => {
+            const base64Audio = reader.result as string;
+            await onAudioTranscription(base64Audio); // Kald prop for at starte transskription og resten af kæden
+          };
         };
 
         mediaRecorderRef.current.start();
         setIsRecording(true);
-        setTranscription("Optager lyd..."); 
+        setTranscription("Optager lyd... Klik igen for at stoppe og starte AI-analyse."); 
       } catch (error) {
         console.error("Fejl ved adgang til mikrofon:", error);
         toast({ title: "Fejl", description: "Kunne ikke starte optagelse. Tjek mikrofontilladelser.", variant: "destructive" });
@@ -110,7 +104,10 @@ export function ControlsPanel({
     }
   };
 
-  const isBusy = isRecording || isTranscribing || isSummarizing || isGeneratingIdeas || isGeneratingImage;
+  const isAnyAIProcessRunning = isTranscribing || isSummarizing || isGeneratingIdeas || isGeneratingImage;
+  // Knappen deaktiveres hvis en AI proces kører, UNDTAGEN hvis det er selve optagelsen der er i gang (så man kan stoppe den).
+  const recordButtonDisabled = isAnyAIProcessRunning && !isRecording;
+
 
   return (
     <Card className="flex-1 flex flex-col h-full shadow-lg">
@@ -119,23 +116,24 @@ export function ControlsPanel({
           AI Kontrol & Analyse
         </CardTitle>
         <CardDescription>
-          Optag lyd, transskriber (simuleret), opsummer, generer idéer og billeder.
+          Start med at optage lyd. AI'en vil derefter automatisk transskribere, opsummere og generere whiteboard-idéer.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-6 overflow-y-auto">
         {/* Lydoptagelse & Transskriptionssektion */}
         <div className="space-y-2">
-          <Label htmlFor="transcription" className="text-sm font-medium">Samtale Transskription</Label>
+          <Label htmlFor="transcription" className="text-sm font-medium">Samtale (Optag eller Indtast Manuelt)</Label>
           <div className="flex gap-2 mb-2">
             <Button 
               onClick={handleRecordToggle} 
-              variant="outline" 
-              size="sm" 
-              aria-label={isRecording ? "Stop Optagelse" : "Start Optagelse"}
-              disabled={isBusy && !isRecording} // Allow stopping recording even if busy
+              variant={isRecording ? "destructive" : "outline"}
+              size="lg" 
+              className="w-full"
+              aria-label={isRecording ? "Stop Optagelse & Start Analyse" : "Start Lydoptagelse"}
+              disabled={recordButtonDisabled}
             >
-              {isRecording ? <Square className="mr-2 h-4 w-4 animate-pulse text-red-500" /> : <Mic className="mr-2 h-4 w-4" />}
-              {isRecording ? 'Stopper Optagelse...' : 'Start Optagelse'}
+              {isRecording ? <Square className="mr-2 h-5 w-5 animate-pulse" /> : <Mic className="mr-2 h-5 w-5" />}
+              {isRecording ? 'Stop Optagelse & Start AI' : 'Start Lydoptagelse'}
             </Button>
           </div>
           <Textarea
@@ -143,90 +141,39 @@ export function ControlsPanel({
             placeholder={
               isRecording ? "Lytter... (optagelse aktiv)" : 
               isTranscribing ? "Transskriberer lyd... vent venligst." :
-              "Start optagelse eller skriv/indsæt samtaletransskription her..."
+              "Start optagelse, eller skriv/indsæt samtaletransskription her og rediger efter behov..."
             }
             value={transcription}
-            onChange={(e) => setTranscription(e.target.value)}
-            className="min-h-[100px] resize-none text-base"
+            onChange={(e) => setTranscription(e.target.value)} // Tillad stadig manuel redigering
+            className="min-h-[150px] resize-none text-base"
             aria-label="Transskriptionsinputområde"
-            readOnly={isRecording || isTranscribing}
-            disabled={isBusy && !isRecording && !isTranscribing}
+            readOnly={isRecording || isAnyAIProcessRunning} // Skrivebeskyttet under optagelse og AI processer
+            disabled={isRecording || isAnyAIProcessRunning}
           />
-           {isTranscribing && (
-            <div className="flex items-center text-sm text-muted-foreground">
+           {currentProcessMessage && (
+            <div className="flex items-center text-sm text-muted-foreground p-2 bg-muted rounded-md">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Transskriberer...
+              {currentProcessMessage}
             </div>
           )}
         </div>
 
-        {/* AI Opsummeringssektion */}
-        <div className="space-y-2">
-          <Button 
-            onClick={onSummarize} 
-            disabled={isBusy || !transcription.trim()} 
-            className="w-full sm:w-auto" 
-            aria-label="Opsummer Transskription"
-          >
-            {isSummarizing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BookText className="mr-2 h-4 w-4" />}
-            Opsummer Transskription
-          </Button>
-          {summary && (
-            <div>
-              <Label className="text-sm font-medium mt-2 block">Resumé & Nøgletemaer</Label>
-              <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
-                {summary}
-              </div>
+        {/* Opsummeringssektion (vises kun, ingen knap) */}
+        {summary && !isSummarizing && ( // Vis kun hvis der er et summary og vi ikke aktivt opsummerer
+          <div className="space-y-2">
+            <Label className="text-sm font-medium mt-2 block">AI Resumé & Nøgletemaer</Label>
+            <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+              {summary}
             </div>
-          )}
-        </div>
+          </div>
+        )}
         
-        {/* AI-Forbedret Whiteboardsektion */}
-        <div className="space-y-2">
-          <Label htmlFor="voicePrompt" className="text-sm font-medium">Stemmebesked til Whiteboard-idéer</Label>
-          <Textarea
-            id="voicePrompt"
-            placeholder="Indtast en besked for at generere eller forfine whiteboard-indhold (f.eks. 'Uddyb marketingstrategien')"
-            value={voicePrompt}
-            onChange={(e) => setVoicePrompt(e.target.value)}
-            className="min-h-[80px] resize-none text-base"
-            aria-label="Stemmebesked til whiteboard-idéer"
-            disabled={isBusy}
-          />
-          <Button 
-            onClick={onGenerateIdeas} 
-            disabled={isBusy || !voicePrompt.trim() || !summary.trim()} 
-            className="w-full sm:w-auto" 
-            aria-label="Generer Whiteboard-idéer"
-          >
-            {isGeneratingIdeas ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-            Generer Whiteboard-idéer
-          </Button>
-        </div>
+        {/* Ingen manuel knap til idégenerering eller billedgenerering */}
+        {/* Billedgenereringssektion er fjernet fra UI for nu, da prompten skal automatiseres */}
 
-        {/* Billedgenereringssektion */}
-        <div className="space-y-2">
-          <Label htmlFor="imagePrompt" className="text-sm font-medium">Prompt til Billedgenerering</Label>
-          <Input
-            id="imagePrompt"
-            placeholder="Beskriv det billede, du vil generere (f.eks. 'En glad kat på en grøn mark')"
-            value={imagePrompt}
-            onChange={(e) => setImagePrompt(e.target.value)}
-            className="text-base"
-            aria-label="Prompt til billedgenerering"
-            disabled={isBusy}
-          />
-          <Button 
-            onClick={onGenerateImage} 
-            disabled={isBusy || !imagePrompt.trim()} 
-            className="w-full sm:w-auto" 
-            aria-label="Generer Billede"
-          >
-            {isGeneratingImage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
-            Generer Billede
-          </Button>
-        </div>
       </CardContent>
     </Card>
   );
 }
+
+    

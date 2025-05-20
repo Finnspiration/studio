@@ -173,16 +173,13 @@ export default function SynapseScribblePage() {
   const handleGenerateImage = async (promptForImage: string, currentTranscriptionForInsights: string) => {
     if (!promptForImage.trim()) {
       toast({ title: "Info", description: "Ingen prompt til billedgenerering fundet. Skipper billedgenerering.", variant: "default" });
-      // Selvom vi skipper billedgenerering, kan vi stadig forsøge at generere indsigter, hvis vi har transskriptionen.
-      // Dog, flowet forventer imageDataUri. Vi kunne sende et tomt, eller simpelthen stoppe her.
-      // For nu stopper vi, da indsigtsgenerering er tænkt at bygge på BÅDE billede OG tekst.
       return;
     }
     setIsGeneratingImage(true);
     setGeneratedImageDataUri(null); // Nulstil før generering
     setNewInsights("");
     try {
-      const styledPrompt = `En simpel whiteboard-tegning eller skitse der illustrerer: ${promptForImage}. Brug primært sort tusch på hvid baggrund, eventuelt med få accentfarver i blå eller grøn. Stilen skal være minimalistisk og ligne noget, der hurtigt er tegnet på et whiteboard under et møde.`;
+      const styledPrompt = `En simpel whiteboard-tegning eller skitse der illustrerer: ${promptForImage}. Generer billedet i et widescreen 16:9 format. Brug primært sort tusch på hvid baggrund, eventuelt med få accentfarver i blå eller grøn. Stilen skal være minimalistisk og ligne noget, der hurtigt er tegnet på et whiteboard under et møde.`;
       const input: GenerateImageInput = { prompt: styledPrompt };
       const result = await generateImage(input);
       setGeneratedImageDataUri(result.imageDataUri);

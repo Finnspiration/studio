@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 interface WhiteboardPanelProps {
   whiteboardContent: string;
   setWhiteboardContent: Dispatch<SetStateAction<string>>;
-  identifiedThemes: string;
+  identifiedThemes: string; // Added identifiedThemes prop
   generatedImageDataUri: string | null;
   isGeneratingImage: boolean;
   currentLoadingState: string | null;
@@ -21,7 +21,7 @@ interface WhiteboardPanelProps {
 export function WhiteboardPanel({ 
   whiteboardContent, 
   setWhiteboardContent, 
-  identifiedThemes, 
+  identifiedThemes, // Destructure identifiedThemes
   generatedImageDataUri, 
   isGeneratingImage,
   currentLoadingState
@@ -64,7 +64,7 @@ export function WhiteboardPanel({
         { (identifiedThemes || isSummarizingThemes) && (
           <div className="mt-2">
             <Label className="mb-2 text-sm font-medium">AI Identificerede Temaer</Label>
-            {isSummarizingThemes ? (
+            {isSummarizingThemes && !identifiedThemes ? ( // Show skeleton only if summarizing AND themes not yet available
               <Skeleton className="h-10 w-full rounded-md" />
             ) : identifiedThemes ? (
               <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground break-words max-h-32 overflow-y-auto">
@@ -108,3 +108,6 @@ export function WhiteboardPanel({
     </Card>
   );
 }
+
+
+    

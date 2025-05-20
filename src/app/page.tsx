@@ -52,7 +52,8 @@ export default function SynapseScribblePage() {
       if (error.message.includes("503") || 
           errorMessageLowerCase.includes("service unavailable") || 
           errorMessageLowerCase.includes("overloaded") ||
-          errorMessageLowerCase.includes("model is overloaded")) {
+          errorMessageLowerCase.includes("model is overloaded") ||
+          errorMessageLowerCase.includes("model is not available")) {
         return "AI-tjenesten (Google) er midlertidigt overbelastet eller utilgængelig. Prøv venligst igen om et øjeblik.";
       }
       return `${baseMessage}: ${error.message}`;
@@ -126,7 +127,6 @@ export default function SynapseScribblePage() {
       } else {
         console.error("Opsummeringsfejl: Intet gyldigt resumé modtaget fra AI.", result);
         toast({ title: "Fejl", description: "Intet gyldigt resumé modtaget fra AI. Prøv venligst igen.", variant: "destructive" });
-         // Forsøg stadig at generere idéer og billede, selvom opsummering fejler delvist
         await handleGenerateIdeas(currentTranscription, "Generelle temaer");
       }
     } catch (error) {
@@ -137,7 +137,6 @@ export default function SynapseScribblePage() {
         description: userMessage, 
         variant: "destructive" 
       });
-       // Forsøg stadig at generere idéer og billede, selvom opsummering fejler helt
       await handleGenerateIdeas(currentTranscription, "Generelle temaer");
     } finally {
       setIsSummarizing(false);
@@ -148,8 +147,6 @@ export default function SynapseScribblePage() {
     if (!currentTranscription.trim()) {
       toast({ title: "Fejl", description: "Transskription er tom for idégenerering.", variant: "destructive" });
       setIsGeneratingIdeas(false); 
-      // Selv hvis ideer fejler pga. tom transskription, prøv at generere billede og indsigter
-      // med hvad der evt. måtte være af temaer eller tidligere opsummering.
       await handleGenerateImage(currentThemes.trim() || "abstrakt visualisering", currentTranscription || summary);
       return;
     }
@@ -183,7 +180,6 @@ export default function SynapseScribblePage() {
         description: userMessage, 
         variant: "destructive" 
       });
-      // Even if ideas fail, try to generate image and insights with what we have
       const imageGenPromptInput = currentThemes.trim() || summary.substring(0, 150).trim() || "abstrakt visualisering af diskussion";
       await handleGenerateImage(imageGenPromptInput, currentTranscription || summary);
     } finally {
@@ -275,15 +271,6 @@ export default function SynapseScribblePage() {
       <AppHeader />
       <main className="flex-1 flex flex-col gap-4 p-4 container mx-auto">
         <div className="flex flex-col md:flex-row gap-4 flex-grow md:max-h-[calc(100vh-200px)]">
-          <div className="md:w-1/2 lg:w-3/5 h-full flex flex-col">
-            <WhiteboardPanel
-              whiteboardContent={whiteboardContent}
-              setWhiteboardContent={setWhiteboardContent}
-              generatedImageDataUri={generatedImageDataUri}
-              isGeneratingImage={isGeneratingImage}
-              currentLoadingState={currentLoadingState()}
-            />
-          </div>
           <div className="md:w-1/2 lg:w-2/5 h-full flex flex-col">
             <ControlsPanel
               transcription={transcription}
@@ -294,6 +281,16 @@ export default function SynapseScribblePage() {
               onStartAnalysisFromText={handleStartAnalysisFromText}
               isAnyAIProcessRunning={isTranscribing || isSummarizing || isGeneratingIdeas || isGeneratingImage || isGeneratingInsights}
               currentLoadingStateForControls={currentLoadingState()}
+            />
+          </div>
+          <div className="md:w-1/2 lg:w-3/5 h-full flex flex-col">
+            <WhiteboardPanel
+              whiteboardContent={whiteboardContent}
+              setWhiteboardContent={setWhiteboardContent}
+              identifiedThemes={identifiedThemes} // Pass themes to WhiteboardPanel
+              generatedImageDataUri={generatedImageDataUri}
+              isGeneratingImage={isGeneratingImage}
+              currentLoadingState={currentLoadingState()}
             />
           </div>
         </div>
@@ -314,4 +311,6 @@ export default function SynapseScribblePage() {
     </div>
   );
 }
+    
+
     

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Mic, Square, Loader2, Sparkles, MessageSquarePlus, PlaySquare } from 'lucide-react'; // Added PlaySquare
+import { Mic, Square, Loader2, Sparkles, MessageSquarePlus, PlaySquare } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -15,55 +15,39 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 interface ControlsPanelProps {
   transcription: string;
   setTranscription: Dispatch<SetStateAction<string>>;
-  summary: string;
   isRecording: boolean;
   setIsRecording: Dispatch<SetStateAction<boolean>>;
   onAudioTranscription: (audioDataUri: string) => Promise<void>;
-  onStartAnalysisFromText: (transcription: string) => Promise<void>; // Ny prop
-  isTranscribing: boolean;
-  isSummarizing: boolean;
-  isGeneratingIdeas: boolean;
-  isGeneratingImage: boolean;
+  onStartAnalysisFromText: (transcription: string) => Promise<void>; 
+  isAnyAIProcessRunning: boolean;
   currentLoadingStateForControls: string | null;
-  newInsights: string;
-  isGeneratingInsights: boolean;
-  onUseInsights: (insights: string) => void;
 }
 
 export function ControlsPanel({
   transcription,
   setTranscription,
-  summary,
   isRecording,
   setIsRecording,
   onAudioTranscription,
-  onStartAnalysisFromText, // Ny prop
-  isTranscribing,
-  isSummarizing,
-  isGeneratingIdeas,
-  isGeneratingImage,
+  onStartAnalysisFromText, 
+  isAnyAIProcessRunning,
   currentLoadingStateForControls,
-  newInsights,
-  isGeneratingInsights,
-  onUseInsights,
 }: ControlsPanelProps) {
   const { toast } = useToast();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   
-  const isAnyAIProcessRunning = isTranscribing || isSummarizing || isGeneratingIdeas || isGeneratingImage || isGeneratingInsights;
   const hasTextContent = transcription.trim().length > 0;
 
   const handlePrimaryAction = async () => {
     if (isRecording) {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-        mediaRecorderRef.current.stop(); // onstop vil håndtere onAudioTranscription
+        mediaRecorderRef.current.stop(); 
       }
       setIsRecording(false);
     } else if (hasTextContent && !isAnyAIProcessRunning) {
       await onStartAnalysisFromText(transcription);
     } else if (!hasTextContent && !isAnyAIProcessRunning) {
-      // Start lydoptagelse
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
@@ -78,7 +62,7 @@ export function ControlsPanel({
         mediaRecorderRef.current.onstop = async () => {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           audioChunksRef.current = [];
-          stream.getTracks().forEach(track => track.stop()); // Stop mikrofon stream
+          stream.getTracks().forEach(track => track.stop()); 
           
           toast({ title: "Optagelse Færdig", description: "Starter automatisk AI-behandling..." });
           
@@ -101,7 +85,6 @@ export function ControlsPanel({
     }
   };
 
-  // Bestem knappens udseende og funktionalitet
   let buttonText: string;
   let ButtonIconComponent: React.ElementType = Mic;
   let buttonVariant: "destructive" | "outline" | "default" = "outline";
@@ -141,7 +124,7 @@ export function ControlsPanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-6">
-        <ScrollArea className="h-[calc(100%-2rem)] pr-3">
+        <ScrollArea className="h-[calc(100%-2rem)] pr-3"> {/* Adjusted for full height */}
           <div className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="transcription" className="text-sm font-medium">Samtale (Optag, Rediger, eller Indsæt Tekst)</Label>
@@ -154,7 +137,7 @@ export function ControlsPanel({
                   aria-label={buttonText}
                   disabled={primaryButtonDisabled}
                 >
-                  <ButtonIconComponent className={`mr-2 h-5 w-5 ${isAnyAIProcessRunning || (isRecording && currentLoadingStateForControls !== "Optager lyd...") ? 'animate-spin' : isRecording ? 'animate-pulse' : ''}`} />
+                  <ButtonIconComponent className={`mr-2 h-5 w-5 ${isAnyAIProcessRunning && !isRecording ? 'animate-spin' : isRecording && currentLoadingStateForControls === "Optager lyd..." ? 'animate-pulse' : isAnyAIProcessRunning ? 'animate-spin' : ''}`} />
                   {buttonText}
                 </Button>
               </div>
@@ -167,7 +150,7 @@ export function ControlsPanel({
                 }
                 value={transcription}
                 onChange={(e) => setTranscription(e.target.value)}
-                className="min-h-[120px] resize-none text-base"
+                className="min-h-[200px] resize-none text-base" 
                 aria-label="Transskriptionsinputområde"
                 readOnly={isRecording || (isAnyAIProcessRunning && !isRecording)}
                 disabled={isRecording || (isAnyAIProcessRunning && !isRecording)}
@@ -179,53 +162,12 @@ export function ControlsPanel({
                 </div>
               )}
             </div>
-
-            {summary && !isSummarizing && !isGeneratingIdeas && !isGeneratingImage && !isGeneratingInsights && (
-              <div className="space-y-2">
-                <Label className="text-sm font-medium mt-2 block">AI Resumé & Nøgletemaer</Label>
-                <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-                  {summary}
-                </div>
-              </div>
-            )}
-
-            { (newInsights || isGeneratingInsights) && (
-              <div className="space-y-2">
-                <Label htmlFor="newInsights" className="text-sm font-medium flex items-center gap-1">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  Nye AI Indsigter (fra billede & samtale)
-                </Label>
-                {isGeneratingInsights ? (
-                  <div className="flex items-center text-sm text-muted-foreground p-3 bg-muted rounded-md">
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Genererer nye indsigter...
-                  </div>
-                ) : newInsights ? (
-                  <>
-                    <div 
-                      id="newInsights"
-                      className="p-3 bg-muted rounded-md text-sm text-muted-foreground whitespace-pre-wrap break-words max-h-40 overflow-y-auto"
-                    >
-                      {newInsights}
-                    </div>
-                    <Button 
-                      onClick={() => onUseInsights(newInsights)} 
-                      variant="outline" 
-                      className="w-full"
-                      disabled={isAnyAIProcessRunning || isRecording}
-                    >
-                      <MessageSquarePlus className="mr-2 h-4 w-4" />
-                      Brug Indsigter til Ny Samtale
-                    </Button>
-                  </>
-                ) : null}
-              </div>
-            )}
           </div>
         </ScrollArea>
       </CardContent>
     </Card>
   );
 }
+    
 
     

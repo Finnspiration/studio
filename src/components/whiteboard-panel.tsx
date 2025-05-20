@@ -44,7 +44,7 @@ export function WhiteboardPanel({
         )}
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-4 overflow-y-auto">
-        <div className="flex flex-col min-h-[250px]"> {/* Fjernet flex-1 her */}
+        <div className="flex flex-col">
           <Label htmlFor="whiteboard" className="mb-2 text-sm font-medium">Whiteboard Indhold (AI genereret, kan redigeres)</Label>
           <Textarea
             id="whiteboard"
@@ -55,14 +55,14 @@ export function WhiteboardPanel({
             }
             value={whiteboardContent}
             onChange={(e) => setWhiteboardContent(e.target.value)}
-            className="flex-1 resize-none text-base bg-card" // Textarea har stadig flex-1 for at fylde sin parent
+            className="min-h-[120px] resize-none text-base bg-card" 
             aria-label="Whiteboard indholdsområde"
             disabled={isGeneratingWhiteboard || isGeneratingImage}
           />
         </div>
         
         { (identifiedThemes || isSummarizingThemes) && (
-          <div className="mt-2">
+          <div className="flex-shrink-0"> 
             <Label className="mb-2 text-sm font-medium">AI Identificerede Temaer</Label>
             {isSummarizingThemes && !identifiedThemes ? ( 
               <Skeleton className="h-10 w-full rounded-md" />
@@ -78,7 +78,7 @@ export function WhiteboardPanel({
           </div>
         )}
 
-        <div className="mt-4">
+        <div className="flex-shrink-0">
           <Label className="mb-2 text-sm font-medium">AI Genereret Billede</Label>
           <div className="w-full aspect-video bg-muted rounded-md flex items-center justify-center overflow-hidden border border-border relative">
             {isGeneratingImage ? (
@@ -90,9 +90,9 @@ export function WhiteboardPanel({
               <Image 
                 src={generatedImageDataUri} 
                 alt="AI genereret billede" 
-                fill // Brug fill i stedet for layout="fill" og objectFit="contain"
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Tilføj sizes for optimering
-                style={{ objectFit: 'contain' }} // Brug style for objectFit
+                fill 
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" 
+                style={{ objectFit: 'contain' }} 
                 className="p-1"
                 data-ai-hint="generated art"
               />

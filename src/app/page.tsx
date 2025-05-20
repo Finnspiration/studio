@@ -14,6 +14,8 @@ import { generateImage } from '@/ai/flows/generate-image-flow';
 import type { GenerateImageInput } from '@/ai/flows/generate-image-flow';
 import { transcribeAudio } from '@/ai/flows/transcribe-audio-flow';
 import type { TranscribeAudioInput, TranscribeAudioOutput } from '@/ai/flows/transcribe-audio-flow';
+import { generateInsights } from '@/ai/flows/generate-insights-flow';
+import type { GenerateInsightsInput } from '@/ai/flows/generate-insights-flow';
 
 
 export default function SynapseScribblePage() {
@@ -30,15 +32,23 @@ export default function SynapseScribblePage() {
   const [generatedImageDataUri, setGeneratedImageDataUri] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
 
+  const [newInsights, setNewInsights] = useState<string>("");
+  const [isGeneratingInsights, setIsGeneratingInsights] = useState<boolean>(false);
+
   const { toast } = useToast();
 
-  const handleAudioTranscription = async (audioDataUri: string) => {
-    setIsTranscribing(true);
-    setTranscription("Behandler lydoptagelse for transskription...");
+  const resetAIOutputs = () => {
     setSummary("");
     setIdentifiedThemes("");
     setWhiteboardContent("");
     setGeneratedImageDataUri(null);
+    setNewInsights("");
+  };
+
+  const handleAudioTranscription = async (audioDataUri: string) => {
+    setIsTranscribing(true);
+    setTranscription("Behandler lydoptagelse for transskription...");
+    resetAIOutputs();
     try {
       const input: TranscribeAudioInput = { audioDataUri };
       const result: TranscribeAudioOutput = await transcribeAudio(input);
@@ -64,6 +74,7 @@ export default function SynapseScribblePage() {
     setIdentifiedThemes("");
     setWhiteboardContent("");
     setGeneratedImageDataUri(null);
+    setNewInsights("");
     try {
       const input: SummarizeTranscriptionInput = { transcription: currentTranscription };
       const result = await summarizeTranscription(input);
@@ -73,11 +84,10 @@ export default function SynapseScribblePage() {
         const firstSentence = result.summary.split('. ')[0];
         let themes = "";
         if (firstSentence) {
-          // Prøv at udlede temaer som keywords fra første sætning, begræns til 5
           themes = firstSentence.split(/[\s,]+/).slice(0, 5).map(t => t.replace(/[^\w\sæøåÆØÅ]/gi, '')).filter(t => t.length > 2).join(', ');
         }
         if (!themes) {
-            themes = firstSentence || result.summary.substring(0, 100); // Fallback til første sætning eller del af summary
+            themes = firstSentence || result.summary.substring(0, 100);
         }
         setIdentifiedThemes(themes);
         toast({ title: "Succes", description: "Transskription opsummeret." });
@@ -110,6 +120,7 @@ export default function SynapseScribblePage() {
     setIsGeneratingIdeas(true);
     setWhiteboardContent("");
     setGeneratedImageDataUri(null);
+    setNewInsights("");
     try {
       const input: GenerateWhiteboardIdeasInput = {
         transcription: currentTranscription,
@@ -121,7 +132,7 @@ export default function SynapseScribblePage() {
       toast({ title: "Succes", description: "Whiteboard-indhold opdateret med AI-idéer." });
       
       const imageGenPrompt = currentThemes.trim() || summary.substring(0, 150).trim() || "abstrakt visualisering af diskussion";
-      await handleGenerateImage(imageGenPrompt);
+      await handleGenerateImage(imageGenPrompt, currentTranscription);
 
     } catch (error) {
       console.error("Idégenereringsfejl:", error);
@@ -136,19 +147,21 @@ export default function SynapseScribblePage() {
     }
   };
   
-  const handleGenerateImage = async (promptForImage: string) => {
+  const handleGenerateImage = async (promptForImage: string, currentTranscriptionForInsights: string) => {
     if (!promptForImage.trim()) {
       toast({ title: "Info", description: "Ingen prompt til billedgenerering fundet. Skipper billedgenerering.", variant: "default" });
       return;
     }
     setIsGeneratingImage(true);
     setGeneratedImageDataUri(null);
+    setNewInsights("");
     try {
       const styledPrompt = `En simpel whiteboard-tegning eller skitse der illustrerer: ${promptForImage}. Brug primært sort tusch på hvid baggrund, eventuelt med få accentfarver i blå eller grøn. Stilen skal være minimalistisk og ligne noget, der hurtigt er tegnet på et whiteboard under et møde.`;
       const input: GenerateImageInput = { prompt: styledPrompt };
       const result = await generateImage(input);
       setGeneratedImageDataUri(result.imageDataUri);
       toast({ title: "Succes", description: "Billede genereret." });
+      await handleGenerateInsights(result.imageDataUri, currentTranscriptionForInsights || summary);
     } catch (error) {
       console.error("Billedgenereringsfejl:", error);
       const errorMessage = error instanceof Error ? error.message : "En ukendt fejl opstod.";
@@ -162,6 +175,40 @@ export default function SynapseScribblePage() {
       setIsGeneratingImage(false);
     }
   };
+
+  const handleGenerateInsights = async (imageDataUri: string, conversationContext: string) => {
+    if (!imageDataUri || !conversationContext.trim()) {
+      toast({ title: "Info", description: "Manglende billede eller samtale kontekst. Kan ikke generere indsigter.", variant: "default" });
+      return;
+    }
+    setIsGeneratingInsights(true);
+    setNewInsights("");
+    try {
+      const input: GenerateInsightsInput = { imageDataUri, conversationContext };
+      const result = await generateInsights(input);
+      setNewInsights(result.insightsText);
+      toast({ title: "Succes", description: "Nye AI-indsigter genereret." });
+    } catch (error) {
+      console.error("Fejl ved generering af indsigter:", error);
+      const errorMessage = error instanceof Error ? error.message : "En ukendt fejl opstod.";
+      toast({
+        title: "Fejl ved Indsigtsgenerering",
+        description: `Kunne ikke generere nye indsigter: ${errorMessage}`,
+        variant: "destructive"
+      });
+    } finally {
+      setIsGeneratingInsights(false);
+    }
+  };
+
+  const handleUseInsights = (insights: string) => {
+    setTranscription(insights);
+    resetAIOutputs(); // Nulstiller summary, themes, whiteboard, image, newInsights
+    toast({ 
+      title: "Ny Samtale Startet", 
+      description: "Indsigter er indsat som ny samtale. Start AI-processen igen ved at optage eller redigere teksten." 
+    });
+  };
   
   const currentLoadingState = () => {
     if (isRecording) return "Optager lyd...";
@@ -169,6 +216,7 @@ export default function SynapseScribblePage() {
     if (isSummarizing) return "Opsummerer...";
     if (isGeneratingIdeas) return "Genererer whiteboard-idéer...";
     if (isGeneratingImage) return "Genererer billede...";
+    if (isGeneratingInsights) return "Genererer nye indsigter...";
     return null;
   }
 
@@ -199,6 +247,9 @@ export default function SynapseScribblePage() {
             isGeneratingIdeas={isGeneratingIdeas}
             isGeneratingImage={isGeneratingImage}
             currentLoadingStateForControls={currentLoadingState()}
+            newInsights={newInsights}
+            isGeneratingInsights={isGeneratingInsights}
+            onUseInsights={handleUseInsights}
           />
         </div>
       </main>

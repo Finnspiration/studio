@@ -18,24 +18,24 @@ export function WhiteboardPanel({ whiteboardContent, setWhiteboardContent, ident
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Palette className="h-6 w-6 text-primary" />
-          Visual Whiteboard
+          Visuelt Whiteboard
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-4">
         <div className="flex-1 flex flex-col">
-          <Label htmlFor="whiteboard" className="mb-2 text-sm font-medium">Whiteboard Content (Editable)</Label>
+          <Label htmlFor="whiteboard" className="mb-2 text-sm font-medium">Whiteboard Indhold (Redigerbart)</Label>
           <Textarea
             id="whiteboard"
-            placeholder="Draw and sketch ideas here... (AI refined content will appear here)"
+            placeholder="Tegn og skitser idéer her... (AI-forfinet indhold vises her)"
             value={whiteboardContent}
             onChange={(e) => setWhiteboardContent(e.target.value)}
             className="flex-1 resize-none text-base"
-            aria-label="Whiteboard content area"
+            aria-label="Whiteboard indholdsområde"
           />
         </div>
         {identifiedThemes && (
           <div>
-            <Label className="mb-2 text-sm font-medium">Identified Themes</Label>
+            <Label className="mb-2 text-sm font-medium">Identificerede Temaer</Label>
             <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground break-words max-h-32 overflow-y-auto">
               {identifiedThemes.split(',').map((theme, index) => (
                 <span key={index} className="inline-block bg-accent text-accent-foreground rounded-full px-3 py-1 text-xs font-semibold mr-2 mb-2">

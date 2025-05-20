@@ -14,21 +14,21 @@ import {z} from 'genkit';
 const GenerateWhiteboardIdeasInputSchema = z.object({
   voicePrompt: z
     .string()
-    .describe('The voice prompt recorded from the user, as a string.'),
+    .describe('Stemmebeskeden optaget fra brugeren, som en streng.'),
   identifiedThemes: z
     .string()
-    .describe('The identified themes from the conversation analysis.'),
+    .describe('De identificerede temaer fra samtaleanalysen.'),
   currentWhiteboardContent: z
     .string()
     .optional()
-    .describe('The current content on the whiteboard, if any.'),
+    .describe('Det nuværende indhold på whiteboardet, hvis nogen.'),
 });
 export type GenerateWhiteboardIdeasInput = z.infer<typeof GenerateWhiteboardIdeasInputSchema>;
 
 const GenerateWhiteboardIdeasOutputSchema = z.object({
   refinedWhiteboardContent: z
     .string()
-    .describe('The refined content for the whiteboard, incorporating new ideas and themes.'),
+    .describe('Det forfinede indhold til whiteboardet, der inkorporerer nye idéer og temaer. Svar på dansk.'),
 });
 export type GenerateWhiteboardIdeasOutput = z.infer<typeof GenerateWhiteboardIdeasOutputSchema>;
 
@@ -40,16 +40,16 @@ const prompt = ai.definePrompt({
   name: 'generateWhiteboardIdeasPrompt',
   input: {schema: GenerateWhiteboardIdeasInputSchema},
   output: {schema: GenerateWhiteboardIdeasOutputSchema},
-  prompt: `You are an AI assistant that helps refine and generate new ideas for a digital whiteboard.
+  prompt: `Du er en AI-assistent, der hjælper med at forfine og generere nye idéer til et digitalt whiteboard. Svar altid på dansk.
 
-  The whiteboard is currently themed around the following topics: {{{identifiedThemes}}}.
-  The user has given the following voice prompt: {{{voicePrompt}}}.
+  Whiteboardet er i øjeblikket tematiseret omkring følgende emner: {{{identifiedThemes}}}.
+  Brugeren har givet følgende stemmebesked: {{{voicePrompt}}}.
 
-  Refine the current whiteboard content (if any) and incorporate new ideas based on the identified themes and voice prompt. Keep the whiteboard content concise and visually appealing.
+  Forfin det nuværende whiteboard-indhold (hvis nogen) og inkorporer nye idéer baseret på de identificerede temaer og stemmebeskeden. Hold whiteboard-indholdet kortfattet og visuelt tiltalende.
 
-  Current whiteboard content: {{{currentWhiteboardContent}}}
+  Nuværende whiteboard-indhold: {{{currentWhiteboardContent}}}
 
-  Refined whiteboard content:`,
+  Forfinet whiteboard-indhold (på dansk):`,
 });
 
 const generateWhiteboardIdeasFlow = ai.defineFlow(

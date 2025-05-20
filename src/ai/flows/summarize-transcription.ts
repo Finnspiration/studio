@@ -12,7 +12,7 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const SummarizeTranscriptionInputSchema = z.object({
-  transcription: z.string().describe('The transcription of the conversation.'),
+  transcription: z.string().describe('Transskriptionen af samtalen.'),
 });
 
 export type SummarizeTranscriptionInput = z.infer<
@@ -20,7 +20,7 @@ export type SummarizeTranscriptionInput = z.infer<
 >;
 
 const SummarizeTranscriptionOutputSchema = z.object({
-  summary: z.string().describe('The summary of the conversation.'),
+  summary: z.string().describe('Resuméet af samtalen. Svar på dansk.'),
 });
 
 export type SummarizeTranscriptionOutput = z.infer<
@@ -37,7 +37,7 @@ const summarizeTranscriptionPrompt = ai.definePrompt({
   name: 'summarizeTranscriptionPrompt',
   input: {schema: SummarizeTranscriptionInputSchema},
   output: {schema: SummarizeTranscriptionOutputSchema},
-  prompt: `Summarize the following transcription of a conversation. Identify the key points and action items discussed.\n\nTranscription: {{{transcription}}}`,
+  prompt: `Opsummer følgende transskription af en samtale. Identificer nøglepunkterne og handlingspunkterne, der blev diskuteret. Svar på dansk.\n\nTransskription: {{{transcription}}}`,
 });
 
 const summarizeTranscriptionFlow = ai.defineFlow(

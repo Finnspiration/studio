@@ -14,9 +14,9 @@ export default function SynapseScribblePage() {
   const [whiteboardContent, setWhiteboardContent] = useState<string>("");
   const [transcription, setTranscription] = useState<string>("");
   const [summary, setSummary] = useState<string>("");
-  const [identifiedThemes, setIdentifiedThemes] = useState<string>(""); // Will be derived from summary
+  const [identifiedThemes, setIdentifiedThemes] = useState<string>(""); // Udledes fra resume
   const [voicePrompt, setVoicePrompt] = useState<string>("");
-  const [isRecording, setIsRecording] = useState<boolean>(false); // Simulated
+  const [isRecording, setIsRecording] = useState<boolean>(false); // Simuleret
   const [isSummarizing, setIsSummarizing] = useState<boolean>(false);
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState<boolean>(false);
 
@@ -24,7 +24,7 @@ export default function SynapseScribblePage() {
 
   const handleSummarize = async () => {
     if (!transcription.trim()) {
-      toast({ title: "Error", description: "Transcription is empty.", variant: "destructive" });
+      toast({ title: "Fejl", description: "Transskription er tom.", variant: "destructive" });
       return;
     }
     setIsSummarizing(true);
@@ -32,14 +32,14 @@ export default function SynapseScribblePage() {
       const input: SummarizeTranscriptionInput = { transcription };
       const result = await summarizeTranscription(input);
       setSummary(result.summary);
-      // For now, use the first few comma-separated phrases from summary as themes if possible, or whole summary
-      // A more robust approach would involve a dedicated theme extraction step or prompting the AI for themes.
+      // Indtil videre, brug de første par komma-separerede sætninger fra resumeet som temaer hvis muligt, eller hele resumeet
+      // En mere robust tilgang ville involvere et dedikeret temaekstraktionstrin eller at bede AI'en om temaer.
       const themes = result.summary.split('. ')[0]?.split(',').slice(0, 5).join(', ') || result.summary;
       setIdentifiedThemes(themes);
-      toast({ title: "Success", description: "Transcription summarized." });
+      toast({ title: "Succes", description: "Transskription opsummeret." });
     } catch (error) {
-      console.error("Summarization error:", error);
-      toast({ title: "Error", description: "Failed to summarize transcription.", variant: "destructive" });
+      console.error("Opsummeringsfejl:", error);
+      toast({ title: "Fejl", description: "Kunne ikke opsummere transskription.", variant: "destructive" });
       setSummary("");
       setIdentifiedThemes("");
     } finally {
@@ -49,26 +49,26 @@ export default function SynapseScribblePage() {
 
   const handleGenerateIdeas = async () => {
     if (!voicePrompt.trim()) {
-      toast({ title: "Error", description: "Voice prompt is empty.", variant: "destructive" });
+      toast({ title: "Fejl", description: "Stemmebesked er tom.", variant: "destructive" });
       return;
     }
-    if (!summary.trim()) { // Use summary as proxy for identifiedThemes readiness
-        toast({ title: "Error", description: "Please summarize transcription first to identify themes.", variant: "destructive" });
+    if (!summary.trim()) { // Brug resume som proxy for identificerede temaers parathed
+        toast({ title: "Fejl", description: "Opsummer venligst transskription først for at identificere temaer.", variant: "destructive" });
         return;
     }
     setIsGeneratingIdeas(true);
     try {
       const input: GenerateWhiteboardIdeasInput = {
         voicePrompt,
-        identifiedThemes: identifiedThemes || summary, // Fallback to full summary if themes specific extraction is not robust
+        identifiedThemes: identifiedThemes || summary, // Fallback til fuldt resume hvis tema-specifik ekstraktion ikke er robust
         currentWhiteboardContent: whiteboardContent,
       };
       const result = await generateWhiteboardIdeas(input);
       setWhiteboardContent(result.refinedWhiteboardContent);
-      toast({ title: "Success", description: "Whiteboard content updated with AI ideas." });
+      toast({ title: "Succes", description: "Whiteboard-indhold opdateret med AI-idéer." });
     } catch (error) {
-      console.error("Idea generation error:", error);
-      toast({ title: "Error", description: "Failed to generate whiteboard ideas.", variant: "destructive" });
+      console.error("Idégenereringsfejl:", error);
+      toast({ title: "Fejl", description: "Kunne ikke generere whiteboard-idéer.", variant: "destructive" });
     } finally {
       setIsGeneratingIdeas(false);
     }

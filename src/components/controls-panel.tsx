@@ -37,14 +37,14 @@ export function ControlsPanel({
 
   const handleRecordToggle = () => {
     setIsRecording(!isRecording);
-    // In a real app, you'd start/stop actual audio recording here.
-    // For now, we just toggle state and allow typing in transcription.
+    // I en rigtig app ville du starte/stoppe faktisk lydoptagelse her.
+    // For nu skifter vi bare tilstand og tillader indtastning i transskription.
     if (!isRecording) {
-      // Simulating start of recording, maybe clear transcription or set placeholder
-      // setTranscription("Recording started... speak now."); 
+      // Simulerer start af optagelse, ryd måske transskription eller sæt pladsholder
+      // setTranscription("Optagelse startet... tal nu."); 
     } else {
-      // Simulating stop of recording
-      // if (transcription === "Recording started... speak now.") setTranscription("");
+      // Simulerer stop af optagelse
+      // if (transcription === "Optagelse startet... tal nu.") setTranscription("");
     }
   };
 
@@ -52,42 +52,42 @@ export function ControlsPanel({
     <Card className="flex-1 flex flex-col h-full shadow-lg">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          AI Controls & Analysis
+          AI Kontrol & Analyse
         </CardTitle>
         <CardDescription>
-          Record audio (simulated), transcribe, summarize, and enhance whiteboard content.
+          Optag lyd (simuleret), transskriber, opsummer og forbedr whiteboard-indhold.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-6 overflow-y-auto">
-        {/* Audio Recording & Transcription Section */}
+        {/* Lydoptagelse & Transskriptionssektion */}
         <div className="space-y-2">
-          <Label htmlFor="transcription" className="text-sm font-medium">Conversation Transcription (Simulated Audio Input)</Label>
+          <Label htmlFor="transcription" className="text-sm font-medium">Samtale Transskription (Simuleret Lydinput)</Label>
           <div className="flex gap-2 mb-2">
-            <Button onClick={handleRecordToggle} variant="outline" size="sm" aria-label={isRecording ? "Stop Recording" : "Start Recording"}>
+            <Button onClick={handleRecordToggle} variant="outline" size="sm" aria-label={isRecording ? "Stop Optagelse" : "Start Optagelse"}>
               {isRecording ? <Square className="mr-2 h-4 w-4" /> : <Mic className="mr-2 h-4 w-4" />}
-              {isRecording ? 'Stop Recording' : 'Start Recording'}
+              {isRecording ? 'Stop Optagelse' : 'Start Optagelse'}
             </Button>
           </div>
           <Textarea
             id="transcription"
-            placeholder={isRecording ? "Listening... (type your simulated conversation here)" : "Type or paste conversation transcript here..."}
+            placeholder={isRecording ? "Lytter... (skriv din simulerede samtale her)" : "Skriv eller indsæt samtaletransskription her..."}
             value={transcription}
             onChange={(e) => setTranscription(e.target.value)}
             className="min-h-[100px] resize-none text-base"
-            aria-label="Transcription input area"
-            readOnly={isRecording && false} // Allow typing even when "recording" for simulation
+            aria-label="Transskriptionsinputområde"
+            readOnly={isRecording && false} // Tillad indtastning selv under "optagelse" for simulering
           />
         </div>
 
-        {/* AI Summarization Section */}
+        {/* AI Opsummeringssektion */}
         <div className="space-y-2">
-          <Button onClick={onSummarize} disabled={isSummarizing || !transcription.trim()} className="w-full sm:w-auto" aria-label="Summarize Transcription">
+          <Button onClick={onSummarize} disabled={isSummarizing || !transcription.trim()} className="w-full sm:w-auto" aria-label="Opsummer Transskription">
             {isSummarizing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BookText className="mr-2 h-4 w-4" />}
-            Summarize Transcription
+            Opsummer Transskription
           </Button>
           {summary && (
             <div>
-              <Label className="text-sm font-medium mt-2 block">Summary & Key Themes</Label>
+              <Label className="text-sm font-medium mt-2 block">Resumé & Nøgletemaer</Label>
               <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
                 {summary}
               </div>
@@ -95,20 +95,20 @@ export function ControlsPanel({
           )}
         </div>
         
-        {/* AI-Enhanced Whiteboard Section */}
+        {/* AI-Forbedret Whiteboardsektion */}
         <div className="space-y-2">
-          <Label htmlFor="voicePrompt" className="text-sm font-medium">Voice Prompt for Whiteboard Ideas</Label>
+          <Label htmlFor="voicePrompt" className="text-sm font-medium">Stemmebesked til Whiteboard-idéer</Label>
           <Textarea
             id="voicePrompt"
-            placeholder="Enter a prompt to generate or refine whiteboard content (e.g., 'Expand on the marketing strategy')"
+            placeholder="Indtast en besked for at generere eller forfine whiteboard-indhold (f.eks. 'Uddyb marketingstrategien')"
             value={voicePrompt}
             onChange={(e) => setVoicePrompt(e.target.value)}
             className="min-h-[80px] resize-none text-base"
-            aria-label="Voice prompt for whiteboard ideas"
+            aria-label="Stemmebesked til whiteboard-idéer"
           />
-          <Button onClick={onGenerateIdeas} disabled={isGeneratingIdeas || !voicePrompt.trim() || !summary.trim()} className="w-full sm:w-auto" aria-label="Generate Whiteboard Ideas">
+          <Button onClick={onGenerateIdeas} disabled={isGeneratingIdeas || !voicePrompt.trim() || !summary.trim()} className="w-full sm:w-auto" aria-label="Generer Whiteboard-idéer">
             {isGeneratingIdeas ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-            Generate Whiteboard Ideas
+            Generer Whiteboard-idéer
           </Button>
         </div>
       </CardContent>

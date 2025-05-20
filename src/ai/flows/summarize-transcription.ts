@@ -1,4 +1,4 @@
-// 'use server';
+// src/ai/flows/summarize-transcription.ts
 /**
  * @fileOverview Summarizes a transcription of a conversation.
  *
@@ -48,6 +48,10 @@ const summarizeTranscriptionFlow = ai.defineFlow(
   },
   async input => {
     const {output} = await summarizeTranscriptionPrompt(input);
-    return output!;
+    if (!output || typeof output.summary !== 'string' || output.summary.trim() === '') {
+      console.error("SummarizeTranscriptionFlow: Output fra prompt var ugyldigt eller manglede resumé.", output);
+      throw new Error("Kunne ikke generere et gyldigt resumé fra AI'en.");
+    }
+    return output;
   }
 );

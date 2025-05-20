@@ -2,11 +2,14 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from 'react';
+import jsPDF from 'jspdf';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Sparkles, MessageSquarePlus, Download } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/hooks/use-toast';
+
 
 interface ResultsPanelProps {
   summary: string;
@@ -16,7 +19,8 @@ interface ResultsPanelProps {
   isGeneratingInsights: boolean;
   onUseInsights: (insights: string) => void;
   isAnyAIProcessRunning: boolean;
-  // Props for PDF generation will be added later
+  whiteboardContent: string;
+  generatedImageDataUri: string | null;
 }
 
 export function ResultsPanel({
@@ -27,9 +31,125 @@ export function ResultsPanel({
   isGeneratingInsights,
   onUseInsights,
   isAnyAIProcessRunning,
+  whiteboardContent,
+  generatedImageDataUri,
 }: ResultsPanelProps) {
+  const { toast } = useToast();
   const isLoadingSummary = isSummarizing || (isAnyAIProcessRunning && !summary && !identifiedThemes);
   const isLoadingInsights = isGeneratingInsights || (isAnyAIProcessRunning && !newInsights && summary);
+
+  const handleGeneratePdf = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageHeight = doc.internal.pageSize.height;
+      const pageWidth = doc.internal.pageSize.width;
+      const margin = 15;
+      const maxLineWidth = pageWidth - margin * 2;
+      let currentY = margin;
+
+      doc.setFontSize(18);
+      doc.text("Synapse Scribble - Analyse Resultater", pageWidth / 2, currentY, { align: 'center' });
+      currentY += 10;
+      
+      const now = new Date();
+      doc.setFontSize(10);
+      doc.text(`Genereret: ${now.toLocaleString('da-DK')}`, pageWidth / 2, currentY, { align: 'center' });
+      currentY += 15;
+
+      const addSection = (title: string, content: string | null | undefined, isPreformatted = false) => {
+        if (currentY + 10 > pageHeight - margin) { // Check for new page before title
+          doc.addPage();
+          currentY = margin;
+        }
+        doc.setFontSize(14);
+        doc.text(title, margin, currentY);
+        currentY += 7;
+        doc.setFontSize(11);
+        if (content && content.trim()) {
+          const lines = doc.splitTextToSize(content, maxLineWidth);
+          lines.forEach((line: string) => {
+            if (currentY > pageHeight - margin) {
+              doc.addPage();
+              currentY = margin;
+            }
+            doc.text(line, margin, currentY);
+            currentY += (isPreformatted ? 5 : 6); // Slightly less line height for preformatted
+          });
+        } else {
+          doc.setTextColor(150);
+          doc.text("Intet indhold genereret.", margin, currentY);
+          doc.setTextColor(0);
+        }
+        currentY += 5; // Extra space after section
+      };
+      
+      addSection("Resumé af Samtale", summary);
+      addSection("Identificerede Temaer", identifiedThemes ? identifiedThemes.split(',').map(t => `- ${t.trim()}`).join('\n') : "Ingen temaer identificeret.");
+      addSection("Whiteboard Indhold", whiteboardContent, true); // True for preformatted-like spacing
+      addSection("Nye AI Indsigter", newInsights);
+
+      if (generatedImageDataUri) {
+        if (currentY + 80 > pageHeight - margin) { // Approximate space for image
+          doc.addPage();
+          currentY = margin;
+        }
+        doc.setFontSize(14);
+        doc.text("AI Genereret Billede", margin, currentY);
+        currentY += 7;
+        try {
+          const imgProps = doc.getImageProperties(generatedImageDataUri);
+          const aspectRatio = imgProps.width / imgProps.height;
+          let imgWidth = maxLineWidth * 0.75; // Use 75% of content width
+          let imgHeight = imgWidth / aspectRatio;
+          const maxHeight = pageHeight - currentY - margin - 5; // Max height for image on current page
+          
+          if (imgHeight > maxHeight) {
+            imgHeight = maxHeight;
+            imgWidth = imgHeight * aspectRatio;
+          }
+           if (imgWidth > maxLineWidth) {
+            imgWidth = maxLineWidth;
+            imgHeight = imgWidth / aspectRatio;
+          }
+
+
+          const x = (pageWidth - imgWidth) / 2; // Center image
+          doc.addImage(generatedImageDataUri, imgProps.fileType, x, currentY, imgWidth, imgHeight);
+          currentY += imgHeight + 10;
+        } catch (e) {
+          console.error("Fejl ved tilføjelse af billede til PDF:", e);
+          doc.setTextColor(150);
+          doc.text("Fejl: Kunne ikke indlæse billede i PDF.", margin, currentY);
+          doc.setTextColor(0);
+          currentY += 10;
+        }
+      } else {
+         if (currentY + 10 > pageHeight - margin) {
+            doc.addPage();
+            currentY = margin;
+          }
+        doc.setFontSize(14);
+        doc.text("AI Genereret Billede", margin, currentY);
+        currentY += 7;
+        doc.setFontSize(11);
+        doc.setTextColor(150);
+        doc.text("Intet billede genereret.", margin, currentY);
+        doc.setTextColor(0);
+        currentY += 10;
+      }
+
+      doc.save(`SynapseScribble_Resultater_${now.toISOString().split('T')[0]}.pdf`);
+      toast({ title: "Succes", description: "PDF genereret og download startet." });
+    } catch (error) {
+      console.error("Fejl ved PDF-generering:", error);
+      toast({ title: "Fejl", description: `Kunne ikke generere PDF: ${error instanceof Error ? error.message : String(error)}`, variant: "destructive" });
+    }
+  };
 
 
   return (
@@ -40,11 +160,11 @@ export function ResultsPanel({
           AI Analyse Resultater
         </CardTitle>
         <CardDescription>
-          Her vises resumé, temaer og nye indsigter genereret af AI.
+          Her vises resumé, temaer og nye indsigter genereret af AI. Du kan downloade resultaterne som PDF.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <ScrollArea className="max-h-[400px] pr-3"> {/* Justerbar max-højde */}
+        <ScrollArea className="max-h-[400px] pr-3"> 
           <div className="space-y-6">
             <div>
               <h3 className="text-lg font-semibold mb-2 text-foreground">Resumé af Samtale</h3>
@@ -107,23 +227,23 @@ export function ResultsPanel({
               )}
             </div>
 
-            {/* PDF Download Knap vil blive tilføjet her senere */}
-            {/* 
+            
             <div className="pt-4 border-t border-border">
               <Button 
                 variant="default" 
                 className="w-full sm:w-auto"
-                // onClick={handleGeneratePdf} // Skal implementeres
-                disabled={isAnyAIProcessRunning || (!summary && !whiteboardContent && !generatedImageDataUri)}
+                onClick={handleGeneratePdf}
+                disabled={isAnyAIProcessRunning || (!summary && !whiteboardContent && !generatedImageDataUri && !newInsights && !identifiedThemes)}
               >
                 <Download className="mr-2 h-4 w-4" />
                 Download Resultater som PDF
               </Button>
             </div>
-            */}
+            
           </div>
         </ScrollArea>
       </CardContent>
     </Card>
   );
 }
+

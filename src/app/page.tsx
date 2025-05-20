@@ -126,6 +126,8 @@ export default function SynapseScribblePage() {
       } else {
         console.error("Opsummeringsfejl: Intet gyldigt resumé modtaget fra AI.", result);
         toast({ title: "Fejl", description: "Intet gyldigt resumé modtaget fra AI. Prøv venligst igen.", variant: "destructive" });
+         // Forsøg stadig at generere idéer og billede, selvom opsummering fejler delvist
+        await handleGenerateIdeas(currentTranscription, "Generelle temaer");
       }
     } catch (error) {
       console.error("Opsummeringsfejl (catch block):", error);
@@ -135,6 +137,8 @@ export default function SynapseScribblePage() {
         description: userMessage, 
         variant: "destructive" 
       });
+       // Forsøg stadig at generere idéer og billede, selvom opsummering fejler helt
+      await handleGenerateIdeas(currentTranscription, "Generelle temaer");
     } finally {
       setIsSummarizing(false);
     }
@@ -143,9 +147,10 @@ export default function SynapseScribblePage() {
   const handleGenerateIdeas = async (currentTranscription: string, currentThemes: string) => {
     if (!currentTranscription.trim()) {
       toast({ title: "Fejl", description: "Transskription er tom for idégenerering.", variant: "destructive" });
-      // Avoid proceeding if essential input is missing
-      setIsGeneratingIdeas(false); // Ensure loading state is reset
-      await handleGenerateImage("", currentTranscription || summary); // Call with empty prompt to allow insight gen
+      setIsGeneratingIdeas(false); 
+      // Selv hvis ideer fejler pga. tom transskription, prøv at generere billede og indsigter
+      // med hvad der evt. måtte være af temaer eller tidligere opsummering.
+      await handleGenerateImage(currentThemes.trim() || "abstrakt visualisering", currentTranscription || summary);
       return;
     }
     if (!currentThemes.trim()) { 
@@ -189,7 +194,6 @@ export default function SynapseScribblePage() {
   const handleGenerateImage = async (promptForImage: string, currentTranscriptionForInsights: string) => {
     if (!promptForImage.trim()) {
       toast({ title: "Info", description: "Ingen prompt til billedgenerering fundet. Fortsætter uden billede.", variant: "default" });
-      // Attempt to generate insights even without an image if the prompt is empty
       await handleGenerateInsights("", currentTranscriptionForInsights || summary);
       return;
     }
@@ -215,13 +219,12 @@ export default function SynapseScribblePage() {
       setGeneratedImageDataUri(null); 
     } finally {
       setIsGeneratingImage(false);
-      // Call generate insights regardless of image generation success/failure
       await handleGenerateInsights(imageDataUriForInsights, currentTranscriptionForInsights || summary);
     }
   };
 
   const handleGenerateInsights = async (imageDataUri: string, conversationContext: string) => {
-    if (!conversationContext.trim()) { // Image can be empty, but context is needed
+    if (!conversationContext.trim()) { 
       toast({ title: "Info", description: "Manglende samtalekontekst. Kan ikke generere indsigter.", variant: "default" });
       return;
     }
@@ -229,7 +232,7 @@ export default function SynapseScribblePage() {
     setNewInsights(""); 
     try {
       const input: GenerateInsightsInput = { 
-        imageDataUri: imageDataUri, // Can be empty string if image failed
+        imageDataUri: imageDataUri, 
         conversationContext 
       };
       const result = await generateInsights(input);
@@ -271,7 +274,7 @@ export default function SynapseScribblePage() {
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <AppHeader />
       <main className="flex-1 flex flex-col gap-4 p-4 container mx-auto">
-        <div className="flex flex-col md:flex-row gap-4 flex-grow md:max-h-[calc(100vh-200px)]"> {/* Juster max-højden efter behov */}
+        <div className="flex flex-col md:flex-row gap-4 flex-grow md:max-h-[calc(100vh-200px)]">
           <div className="md:w-1/2 lg:w-3/5 h-full flex flex-col">
             <WhiteboardPanel
               whiteboardContent={whiteboardContent}
@@ -303,6 +306,8 @@ export default function SynapseScribblePage() {
             isGeneratingInsights={isGeneratingInsights}
             onUseInsights={handleUseInsights}
             isAnyAIProcessRunning={isTranscribing || isSummarizing || isGeneratingIdeas || isGeneratingImage || isGeneratingInsights || isRecording}
+            whiteboardContent={whiteboardContent}
+            generatedImageDataUri={generatedImageDataUri}
           />
         </div>
       </main>

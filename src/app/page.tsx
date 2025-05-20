@@ -27,7 +27,7 @@ export default function SynapseScribblePage() {
   const [isSummarizing, setIsSummarizing] = useState<boolean>(false);
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState<boolean>(false);
   
-  const [imagePrompt, setImagePrompt] = useState<string>(""); // Beholder for nu, men UI for input fjernes
+  // imagePrompt sættes nu automatisk
   const [generatedImageDataUri, setGeneratedImageDataUri] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
 
@@ -36,17 +36,20 @@ export default function SynapseScribblePage() {
   const handleAudioTranscription = async (audioDataUri: string) => {
     setIsTranscribing(true);
     setTranscription("Behandler lydoptagelse for transskription...");
+    setSummary("");
+    setIdentifiedThemes("");
+    setWhiteboardContent("");
+    setGeneratedImageDataUri(null);
     try {
       const input: TranscribeAudioInput = { audioDataUri };
       const result: TranscribeAudioOutput = await transcribeAudio(input);
       setTranscription(result.transcription);
       toast({ title: "Succes", description: "Automatisk transskription fuldført (simuleret)." });
-      // Automatisk start opsummering
       await handleSummarize(result.transcription);
     } catch (error) {
       console.error("Fejl under (simuleret) transskription:", error);
       toast({ title: "Fejl", description: "Kunne ikke transskribere lyden (simuleret).", variant: "destructive" });
-      setTranscription(""); // Nulstil hvis fejl
+      setTranscription("");
     } finally {
       setIsTranscribing(false);
     }
@@ -58,8 +61,10 @@ export default function SynapseScribblePage() {
       return;
     }
     setIsSummarizing(true);
-    setSummary(""); // Nulstil tidligere resumé
-    setIdentifiedThemes(""); // Nulstil tidligere temaer
+    setSummary(""); 
+    setIdentifiedThemes("");
+    setWhiteboardContent("");
+    setGeneratedImageDataUri(null);
     try {
       const input: SummarizeTranscriptionInput = { transcription: currentTranscription };
       const result = await summarizeTranscription(input);
@@ -69,14 +74,14 @@ export default function SynapseScribblePage() {
         const firstSentence = result.summary.split('. ')[0];
         let themes = "";
         if (firstSentence) {
-          themes = firstSentence.split(',').slice(0, 5).map(t => t.trim()).filter(t => t).join(', ');
+          // Prøv at udlede temaer som keywords fra første sætning, begræns til 5
+          themes = firstSentence.split(/[\s,]+/).slice(0, 5).map(t => t.replace(/[^\w\sæøåÆØÅ]/gi, '')).filter(t => t.length > 2).join(', ');
         }
         if (!themes) {
-            themes = firstSentence || result.summary;
+            themes = firstSentence || result.summary.substring(0, 100); // Fallback til første sætning eller del af summary
         }
         setIdentifiedThemes(themes);
         toast({ title: "Succes", description: "Transskription opsummeret." });
-        // Automatisk start idégenerering
         await handleGenerateIdeas(currentTranscription, themes || result.summary);
       } else {
         console.error("Opsummeringsfejl: Intet gyldigt resumé modtaget fra AI.", result);
@@ -97,7 +102,6 @@ export default function SynapseScribblePage() {
 
   const handleGenerateIdeas = async (currentTranscription: string, currentThemes: string) => {
     if (!currentTranscription.trim()) {
-      // Dette bør ikke ske hvis flowet følges, men som en sikkerhedsforanstaltning
       toast({ title: "Fejl", description: "Transskription er tom for idégenerering.", variant: "destructive" });
       return;
     }
@@ -105,15 +109,22 @@ export default function SynapseScribblePage() {
         toast({ title: "Info", description: "Ingen temaer identificeret. Bruger fuld transskription til idéer.", variant: "default" });
     }
     setIsGeneratingIdeas(true);
+    setWhiteboardContent("");
+    setGeneratedImageDataUri(null);
     try {
       const input: GenerateWhiteboardIdeasInput = {
-        transcription: currentTranscription, // Bruger den fulde transskription
+        transcription: currentTranscription,
         identifiedThemes: currentThemes, 
-        currentWhiteboardContent: whiteboardContent,
+        currentWhiteboardContent: "", // Starter med tomt whiteboard for automatisk flow
       };
       const result = await generateWhiteboardIdeas(input);
       setWhiteboardContent(result.refinedWhiteboardContent);
       toast({ title: "Succes", description: "Whiteboard-indhold opdateret med AI-idéer." });
+      // Automatisk start billedgenerering efter idéer er genereret
+      // Brug identificerede temaer som billedprompt, eller en del af resuméet.
+      const imageGenPrompt = currentThemes.trim() || summary.substring(0, 150).trim() || "abstrakt visualisering af diskussion";
+      await handleGenerateImage(imageGenPrompt);
+
     } catch (error) {
       console.error("Idégenereringsfejl:", error);
       const errorMessage = error instanceof Error ? error.message : "En ukendt fejl opstod.";
@@ -126,17 +137,16 @@ export default function SynapseScribblePage() {
       setIsGeneratingIdeas(false);
     }
   };
-
-  // Billedgenerering holdes separat for nu, da prompten ikke er automatiseret endnu
-  const handleGenerateImage = async () => {
-    if (!imagePrompt.trim()) { // Bruger stadig imagePrompt state, men UI for input er fjernet
-      toast({ title: "Fejl", description: "Billedprompt er tom. (Skal automatiseres)", variant: "destructive" });
+  
+  const handleGenerateImage = async (promptForImage: string) => {
+    if (!promptForImage.trim()) {
+      toast({ title: "Info", description: "Ingen prompt til billedgenerering fundet. Skipper billedgenerering.", variant: "default" });
       return;
     }
     setIsGeneratingImage(true);
     setGeneratedImageDataUri(null);
     try {
-      const input: GenerateImageInput = { prompt: imagePrompt };
+      const input: GenerateImageInput = { prompt: `Generer et billede der visualiserer: ${promptForImage}` };
       const result = await generateImage(input);
       setGeneratedImageDataUri(result.imageDataUri);
       toast({ title: "Succes", description: "Billede genereret." });
@@ -158,7 +168,7 @@ export default function SynapseScribblePage() {
     if (isRecording) return "Optager lyd...";
     if (isTranscribing) return "Transskriberer...";
     if (isSummarizing) return "Opsummerer...";
-    if (isGeneratingIdeas) return "Genererer idéer...";
+    if (isGeneratingIdeas) return "Genererer whiteboard-idéer...";
     if (isGeneratingImage) return "Genererer billede...";
     return null;
   }
@@ -180,7 +190,7 @@ export default function SynapseScribblePage() {
         <div className="md:w-1/2 lg:w-2/5 h-full flex flex-col">
           <ControlsPanel
             transcription={transcription}
-            setTranscription={setTranscription} // Stadig nødvendig for manuel redigering hvis ønsket
+            setTranscription={setTranscription}
             summary={summary}
             isRecording={isRecording}
             setIsRecording={setIsRecording}
@@ -188,14 +198,11 @@ export default function SynapseScribblePage() {
             isTranscribing={isTranscribing}
             isSummarizing={isSummarizing}
             isGeneratingIdeas={isGeneratingIdeas}
-            isGeneratingImage={isGeneratingImage} // Til at deaktivere knapper
-            // Fjerner props for manuelle AI handlinger og prompts
-            // onSummarize, onGenerateIdeas, imagePrompt, setImagePrompt, onGenerateImage
+            isGeneratingImage={isGeneratingImage}
+            currentLoadingStateForControls={currentLoadingState()}
           />
         </div>
       </main>
     </div>
   );
 }
-
-    

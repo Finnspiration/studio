@@ -44,16 +44,24 @@ const generateImageFlow = ai.defineFlow(
       },
     });
 
-    if (!media || !media.url) {
-      throw new Error('Image generation failed or did not return a valid image URL.');
+    // Gemini 2.0 Flash experimental can return an array of media items.
+    // We'll take the first one if it's an array.
+    let imageUrl: string | undefined;
+    if (Array.isArray(media) && media.length > 0) {
+      imageUrl = media[0]?.url;
+    } else if (media && typeof media === 'object' && 'url' in media) {
+      // Handle cases where media might be a single object (though array is typical for gemini-2.0-flash-exp image)
+      imageUrl = (media as { url: string }).url;
     }
     
-    // Gemini 2.0 Flash experimental returns an array of media items, even if only one is generated.
-    // We'll take the first one.
-    const imageUrl = Array.isArray(media) ? media[0]?.url : media.url;
 
     if (!imageUrl) {
-         throw new Error('Image generation failed or did not return a valid image URL from media array.');
+      let errorDetails = "Image generation failed or did not return a valid image URL.";
+      if (media) {
+        errorDetails += ` Received media: ${JSON.stringify(media, null, 2)}`;
+      }
+      console.error("generateImageFlow error:", errorDetails);
+      throw new Error(errorDetails);
     }
 
     return { imageDataUri: imageUrl };

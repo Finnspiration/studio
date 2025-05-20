@@ -2,13 +2,15 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from 'react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Mic, Square, BookText, Sparkles, Loader2 } from 'lucide-react';
+import { Mic, Square, BookText, Sparkles, Loader2, FileAudio } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+import { transcribeAudio } from '@/ai/flows/transcribe-audio-flow';
+import type { TranscribeAudioInput } from '@/ai/flows/transcribe-audio-flow';
 
 interface ControlsPanelProps {
   transcription: string;
@@ -40,6 +42,7 @@ export function ControlsPanel({
   const { toast } = useToast();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
 
   const handleRecordToggle = async () => {
     if (isRecording) {
@@ -61,21 +64,39 @@ export function ControlsPanel({
           }
         };
 
-        mediaRecorderRef.current.onstop = () => {
+        mediaRecorderRef.current.onstop = async () => {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          // For nu gør vi ikke noget aktivt med audioBlob, men den er optaget.
-          // I en fremtidig version kunne den sendes til en tale-til-tekst service.
-          console.log("Optaget audio blob:", audioBlob);
           audioChunksRef.current = [];
-          setTranscription(""); // Ryd "Optager lyd..." og gør klar til manuel indtastning
-          toast({ title: "Succes", description: "Lydoptagelse afsluttet." });
+          
           // Stop alle spor for at frigive mikrofonen
           stream.getTracks().forEach(track => track.stop());
+          
+          toast({ title: "Succes", description: "Lydoptagelse afsluttet. Starter transskription..." });
+          setIsTranscribing(true);
+          setTranscription("Behandler lydoptagelse for transskription...");
+
+          try {
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = async () => {
+              const base64Audio = reader.result as string;
+              const input: TranscribeAudioInput = { audioDataUri: base64Audio };
+              const result = await transcribeAudio(input);
+              setTranscription(result.transcription);
+              toast({ title: "Succes", description: "Automatisk transskription fuldført (simuleret)." });
+            };
+          } catch (error) {
+            console.error("Fejl under (simuleret) transskription:", error);
+            toast({ title: "Fejl", description: "Kunne ikke transskribere lyden (simuleret). Prøv at indtaste manuelt.", variant: "destructive" });
+            setTranscription(""); // Ryd til manuel indtastning ved fejl
+          } finally {
+            setIsTranscribing(false);
+          }
         };
 
         mediaRecorderRef.current.start();
         setIsRecording(true);
-        setTranscription("Optager lyd..."); // Indikerer optagelse i tekstfeltet
+        setTranscription("Optager lyd..."); 
       } catch (error) {
         console.error("Fejl ved adgang til mikrofon:", error);
         toast({ title: "Fejl", description: "Kunne ikke starte optagelse. Tjek mikrofontilladelser.", variant: "destructive" });
@@ -84,6 +105,8 @@ export function ControlsPanel({
     }
   };
 
+  const isBusy = isRecording || isTranscribing || isSummarizing || isGeneratingIdeas;
+
   return (
     <Card className="flex-1 flex flex-col h-full shadow-lg">
       <CardHeader>
@@ -91,7 +114,7 @@ export function ControlsPanel({
           AI Kontrol & Analyse
         </CardTitle>
         <CardDescription>
-          Optag lyd, transskriber (manuelt), opsummer og forbedr whiteboard-indhold.
+          Optag lyd, få den automatisk transskriberet (simuleret), opsummer og forbedr whiteboard-indhold.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-6 overflow-y-auto">
@@ -99,25 +122,46 @@ export function ControlsPanel({
         <div className="space-y-2">
           <Label htmlFor="transcription" className="text-sm font-medium">Samtale Transskription</Label>
           <div className="flex gap-2 mb-2">
-            <Button onClick={handleRecordToggle} variant="outline" size="sm" aria-label={isRecording ? "Stop Optagelse" : "Start Optagelse"}>
+            <Button 
+              onClick={handleRecordToggle} 
+              variant="outline" 
+              size="sm" 
+              aria-label={isRecording ? "Stop Optagelse" : "Start Optagelse"}
+              disabled={isTranscribing || isSummarizing || isGeneratingIdeas}
+            >
               {isRecording ? <Square className="mr-2 h-4 w-4 animate-pulse text-red-500" /> : <Mic className="mr-2 h-4 w-4" />}
               {isRecording ? 'Stopper Optagelse...' : 'Start Optagelse'}
             </Button>
           </div>
           <Textarea
             id="transcription"
-            placeholder={isRecording ? "Lytter... (optagelse aktiv)" : "Start optagelse eller skriv/indsæt samtaletransskription her..."}
+            placeholder={
+              isRecording ? "Lytter... (optagelse aktiv)" : 
+              isTranscribing ? "Transskriberer lyd... vent venligst." :
+              "Start optagelse eller skriv/indsæt samtaletransskription her..."
+            }
             value={transcription}
             onChange={(e) => setTranscription(e.target.value)}
             className="min-h-[100px] resize-none text-base"
             aria-label="Transskriptionsinputområde"
-            readOnly={isRecording}
+            readOnly={isRecording || isTranscribing}
           />
+           {isTranscribing && (
+            <div className="flex items-center text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Transskriberer...
+            </div>
+          )}
         </div>
 
         {/* AI Opsummeringssektion */}
         <div className="space-y-2">
-          <Button onClick={onSummarize} disabled={isSummarizing || !transcription.trim() || isRecording} className="w-full sm:w-auto" aria-label="Opsummer Transskription">
+          <Button 
+            onClick={onSummarize} 
+            disabled={isBusy || !transcription.trim()} 
+            className="w-full sm:w-auto" 
+            aria-label="Opsummer Transskription"
+          >
             {isSummarizing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BookText className="mr-2 h-4 w-4" />}
             Opsummer Transskription
           </Button>
@@ -141,9 +185,14 @@ export function ControlsPanel({
             onChange={(e) => setVoicePrompt(e.target.value)}
             className="min-h-[80px] resize-none text-base"
             aria-label="Stemmebesked til whiteboard-idéer"
-            disabled={isRecording}
+            disabled={isBusy}
           />
-          <Button onClick={onGenerateIdeas} disabled={isGeneratingIdeas || !voicePrompt.trim() || !summary.trim() || isRecording} className="w-full sm:w-auto" aria-label="Generer Whiteboard-idéer">
+          <Button 
+            onClick={onGenerateIdeas} 
+            disabled={isBusy || !voicePrompt.trim() || !summary.trim()} 
+            className="w-full sm:w-auto" 
+            aria-label="Generer Whiteboard-idéer"
+          >
             {isGeneratingIdeas ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
             Generer Whiteboard-idéer
           </Button>

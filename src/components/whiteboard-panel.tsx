@@ -43,8 +43,8 @@ export function WhiteboardPanel({
           </CardDescription>
         )}
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col gap-4 overflow-y-auto">
-        <div className="flex flex-col">
+      <CardContent className="flex-1 flex flex-col overflow-y-auto"> {/* Removed gap-4 */}
+        <div className="flex flex-col flex-shrink-0"> {/* Added flex-shrink-0 */}
           <Label htmlFor="whiteboard" className="mb-2 text-sm font-medium">Whiteboard Indhold (AI genereret, kan redigeres)</Label>
           <Textarea
             id="whiteboard"
@@ -62,7 +62,7 @@ export function WhiteboardPanel({
         </div>
         
         { (identifiedThemes || isSummarizingThemes) && (
-          <div className="flex-shrink-0"> 
+          <div className="flex-shrink-0 mt-4" style={{ isolation: 'isolate' }}> {/* Added mt-4 and isolation */}
             <Label className="mb-2 text-sm font-medium">AI Identificerede Temaer</Label>
             {isSummarizingThemes && !identifiedThemes ? ( 
               <Skeleton className="h-10 w-full rounded-md" />
@@ -78,7 +78,7 @@ export function WhiteboardPanel({
           </div>
         )}
 
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 mt-4"> {/* Added mt-4 */}
           <Label className="mb-2 text-sm font-medium">AI Genereret Billede</Label>
           <div className="w-full aspect-video bg-muted rounded-md flex items-center justify-center overflow-hidden border border-border relative">
             {isGeneratingImage ? (
@@ -92,8 +92,7 @@ export function WhiteboardPanel({
                 alt="AI genereret billede" 
                 fill 
                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" 
-                style={{ objectFit: 'contain' }} 
-                className="p-1"
+                style={{ objectFit: 'contain' }}
                 data-ai-hint="generated art"
               />
             ) : (

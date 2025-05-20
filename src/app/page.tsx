@@ -27,7 +27,6 @@ export default function SynapseScribblePage() {
   const [isSummarizing, setIsSummarizing] = useState<boolean>(false);
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState<boolean>(false);
   
-  // imagePrompt sættes nu automatisk
   const [generatedImageDataUri, setGeneratedImageDataUri] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
 
@@ -115,13 +114,12 @@ export default function SynapseScribblePage() {
       const input: GenerateWhiteboardIdeasInput = {
         transcription: currentTranscription,
         identifiedThemes: currentThemes, 
-        currentWhiteboardContent: "", // Starter med tomt whiteboard for automatisk flow
+        currentWhiteboardContent: "", 
       };
       const result = await generateWhiteboardIdeas(input);
       setWhiteboardContent(result.refinedWhiteboardContent);
       toast({ title: "Succes", description: "Whiteboard-indhold opdateret med AI-idéer." });
-      // Automatisk start billedgenerering efter idéer er genereret
-      // Brug identificerede temaer som billedprompt, eller en del af resuméet.
+      
       const imageGenPrompt = currentThemes.trim() || summary.substring(0, 150).trim() || "abstrakt visualisering af diskussion";
       await handleGenerateImage(imageGenPrompt);
 
@@ -146,7 +144,8 @@ export default function SynapseScribblePage() {
     setIsGeneratingImage(true);
     setGeneratedImageDataUri(null);
     try {
-      const input: GenerateImageInput = { prompt: `Generer et billede der visualiserer: ${promptForImage}` };
+      const styledPrompt = `En simpel whiteboard-tegning eller skitse der illustrerer: ${promptForImage}. Brug primært sort tusch på hvid baggrund, eventuelt med få accentfarver i blå eller grøn. Stilen skal være minimalistisk og ligne noget, der hurtigt er tegnet på et whiteboard under et møde.`;
+      const input: GenerateImageInput = { prompt: styledPrompt };
       const result = await generateImage(input);
       setGeneratedImageDataUri(result.imageDataUri);
       toast({ title: "Succes", description: "Billede genereret." });

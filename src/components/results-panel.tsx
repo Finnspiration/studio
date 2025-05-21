@@ -226,22 +226,19 @@ export function ResultsPanel({
                 <p className="text-sm text-muted-foreground italic">Ingen nye indsigter genereret endnu.</p>
               )}
             </div>
-
-            
-            <div className="pt-4 border-t border-border">
-              <Button 
-                variant="default" 
-                className="w-full sm:w-auto"
-                onClick={handleGeneratePdf}
-                disabled={isAnyAIProcessRunning} // Changed this line
-              >
-                <Download className="mr-2 h-4 w-4" />
-                Download Resultater som PDF
-              </Button>
-            </div>
-            
           </div>
         </ScrollArea>
+        <div className="pt-4 mt-4 border-t border-border">
+          <Button 
+            variant="default" 
+            className="w-full sm:w-auto"
+            onClick={handleGeneratePdf}
+            disabled={isAnyAIProcessRunning}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Download Resultater som PDF
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

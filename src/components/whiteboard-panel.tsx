@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Palette, ImageOff, Loader2 } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
 
 interface WhiteboardPanelProps {
   whiteboardContent: string;
@@ -40,10 +39,10 @@ export function WhiteboardPanel({
           </CardDescription>
         )}
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col overflow-y-auto">
-        <div className="flex-1 flex flex-col space-y-4">
+      <CardContent className="flex-1 flex flex-col overflow-hidden p-0"> {/* Changed: p-6 to p-0 */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4"> {/* Added: wrapper div for padding and scroll */}
           {/* Section 1: Whiteboard Content */}
-          <div className="flex flex-col flex-1">
+          <div className="flex flex-col flex-1"> {/* Added flex-1 to allow this section to grow */}
             <Label htmlFor="whiteboard" className="mb-2 text-sm font-medium">Whiteboard Indhold (AI genereret, kan redigeres)</Label>
             <Textarea
               id="whiteboard"
@@ -61,7 +60,7 @@ export function WhiteboardPanel({
           </div>
           
           {/* Section 3: Generated Image */}
-          <div className="mt-4 flex-shrink-0">
+          <div className="flex-shrink-0">
             <Label className="mb-2 text-sm font-medium">AI Genereret Billede</Label>
             <div className="w-full aspect-video bg-muted rounded-md flex items-center justify-center overflow-hidden border border-border relative">
               {isGeneratingImage ? (

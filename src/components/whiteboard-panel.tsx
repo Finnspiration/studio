@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Palette, ImageOff, Loader2 } from 'lucide-react';
+import { ScrollArea } from './ui/scroll-area';
 
 interface WhiteboardPanelProps {
   whiteboardContent: string;
@@ -27,20 +28,20 @@ export function WhiteboardPanel({
 
   return (
     <Card className="flex-1 flex flex-col shadow-lg">
-      <CardHeader className="p-4"> {/* Reduced padding from p-6 to p-4 */}
+      <CardHeader className="px-4 pt-5 pb-4"> {/* Adjusted padding: p-4 to px-4 pt-5 pb-4 */}
         <CardTitle className="flex items-center gap-2">
           <Palette className="h-6 w-6 text-primary" />
           Whiteboard
         </CardTitle>
         {currentLoadingState && !currentLoadingState.includes("Optager") && (
-          <CardDescription className="flex items-center text-sm pt-1 text-primary"> {/* Adjusted pt for reduced header padding */}
+          <CardDescription className="flex items-center text-sm pt-1 text-primary"> 
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             {currentLoadingState}
           </CardDescription>
         )}
       </CardHeader>
       <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 flex flex-col"> {/* Added flex flex-col here */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 flex flex-col">
           {/* Section 1: Whiteboard Content */}
           <div className="flex flex-col flex-1"> 
             <Label htmlFor="whiteboard" className="mb-2 text-sm font-medium">Whiteboard Indhold (AI genereret, kan redigeres)</Label>
@@ -60,7 +61,7 @@ export function WhiteboardPanel({
           </div>
           
           {/* Section 3: Generated Image */}
-          <div className="flex-shrink-0 mt-4"> {/* Added mt-4 for spacing, was handled by space-y before */}
+          <div className="flex-shrink-0 mt-4">
             <Label className="mb-2 text-sm font-medium">AI Genereret Billede</Label>
             <div className="w-full aspect-video bg-muted rounded-md flex items-center justify-center overflow-hidden border border-border relative">
               {isGeneratingImage ? (

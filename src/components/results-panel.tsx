@@ -53,7 +53,7 @@ export function ResultsPanel({
       let currentY = margin;
 
       doc.setFontSize(18);
-      doc.text("Synapse Scribble - Analyse Resultater", pageWidth / 2, currentY, { align: 'center' });
+      doc.text("FraimeWorks Lite - Analyse Resultater", pageWidth / 2, currentY, { align: 'center' });
       currentY += 10;
       
       const now = new Date();
@@ -143,7 +143,7 @@ export function ResultsPanel({
         currentY += 10;
       }
 
-      doc.save(`SynapseScribble_Resultater_${now.toISOString().split('T')[0]}.pdf`);
+      doc.save(`FraimeWorksLite_Resultater_${now.toISOString().split('T')[0]}.pdf`);
       toast({ title: "Succes", description: "PDF genereret og download startet." });
     } catch (error) {
       console.error("Fejl ved PDF-generering:", error);
@@ -233,7 +233,7 @@ export function ResultsPanel({
                 variant="default" 
                 className="w-full sm:w-auto"
                 onClick={handleGeneratePdf}
-                disabled={isAnyAIProcessRunning || (!summary && !whiteboardContent && !generatedImageDataUri && !newInsights && !identifiedThemes)}
+                disabled={isAnyAIProcessRunning} // Changed this line
               >
                 <Download className="mr-2 h-4 w-4" />
                 Download Resultater som PDF

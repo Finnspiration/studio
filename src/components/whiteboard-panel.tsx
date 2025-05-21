@@ -30,11 +30,11 @@ export function WhiteboardPanel({
   const isSummarizingThemes = !!currentLoadingState && currentLoadingState.includes("Opsummerer");
 
   return (
-    <Card className="flex-1 flex flex-col shadow-lg"> {/* Removed h-full */}
+    <Card className="flex-1 flex flex-col shadow-lg">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Palette className="h-6 w-6 text-primary" />
-          Visuelt Whiteboard & Medier
+          Whiteboard
         </CardTitle>
         {currentLoadingState && !currentLoadingState.includes("Optager") && (
           <CardDescription className="flex items-center text-sm pt-2 text-primary">
@@ -65,7 +65,7 @@ export function WhiteboardPanel({
           
           {/* Section 2: Identified Themes */}
           { (identifiedThemes || isSummarizingThemes) && (
-            <div style={{ isolation: 'isolate' }}>
+            <div style={{ isolation: 'isolate' }} className="mt-4">
               <Label className="mb-2 text-sm font-medium">AI Identificerede Temaer</Label>
               {isSummarizingThemes && !identifiedThemes ? ( 
                 <Skeleton className="h-10 w-full rounded-md" />
@@ -82,7 +82,7 @@ export function WhiteboardPanel({
           )}
 
           {/* Section 3: Generated Image */}
-          <div>
+          <div className="mt-4">
             <Label className="mb-2 text-sm font-medium">AI Genereret Billede</Label>
             <div className="w-full aspect-video bg-muted rounded-md flex items-center justify-center overflow-hidden border border-border relative">
               {isGeneratingImage ? (

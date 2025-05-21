@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Mic, Square, Loader2, Sparkles, MessageSquarePlus, PlaySquare } from 'lucide-react';
+import { Mic, Square, Loader2, PlaySquare } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -88,19 +88,23 @@ export function ControlsPanel({
   let buttonText: string;
   let ButtonIconComponent: React.ElementType = Mic;
   let buttonVariant: "destructive" | "outline" | "default" = "outline";
+  let iconAnimationClass = "";
 
   if (isRecording) {
     if (isAnyAIProcessRunning && currentLoadingStateForControls !== "Optager lyd...") {
       buttonText = "AI Bearbejder (Stop Optagelse)";
       ButtonIconComponent = Loader2;
+      iconAnimationClass = "animate-spin";
     } else {
       buttonText = "Stop Optagelse & Start AI";
       ButtonIconComponent = Square;
+      iconAnimationClass = currentLoadingStateForControls === "Optager lyd..." ? "animate-pulse" : "";
     }
     buttonVariant = "destructive";
   } else if (isAnyAIProcessRunning) {
     buttonText = currentLoadingStateForControls || "AI Bearbejder...";
     ButtonIconComponent = Loader2;
+    iconAnimationClass = "animate-spin";
   } else if (hasTextContent) {
     buttonText = "Start AI Analyse med Tekst";
     ButtonIconComponent = PlaySquare; 
@@ -114,7 +118,7 @@ export function ControlsPanel({
   const primaryButtonDisabled = isAnyAIProcessRunning && !isRecording;
 
   return (
-    <Card className="flex-1 flex flex-col h-full shadow-lg">
+    <Card className="flex-1 flex flex-col shadow-lg"> {/* Removed h-full */}
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           AI Kontrol & Analyse
@@ -123,9 +127,9 @@ export function ControlsPanel({
           Start med lydoptagelse eller indtast tekst. AI'en vil derefter automatisk analysere, generere idéer, billede og indsigter.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col gap-6">
-        <ScrollArea className="h-[calc(100%-2rem)] pr-3"> {/* Adjusted for full height */}
-          <div className="space-y-6">
+      <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
+        <ScrollArea className="flex-1">
+          <div className="p-6 space-y-6">
             <div className="space-y-2">
               <Label htmlFor="transcription" className="text-sm font-medium">Samtale (Optag, Rediger, eller Indsæt Tekst)</Label>
               <div className="flex gap-2 mb-2">
@@ -137,7 +141,7 @@ export function ControlsPanel({
                   aria-label={buttonText}
                   disabled={primaryButtonDisabled}
                 >
-                  <ButtonIconComponent className={`mr-2 h-5 w-5 ${isAnyAIProcessRunning && !isRecording ? 'animate-spin' : isRecording && currentLoadingStateForControls === "Optager lyd..." ? 'animate-pulse' : isAnyAIProcessRunning ? 'animate-spin' : ''}`} />
+                  <ButtonIconComponent className={`mr-2 h-5 w-5 ${iconAnimationClass}`} />
                   {buttonText}
                 </Button>
               </div>
@@ -168,6 +172,3 @@ export function ControlsPanel({
     </Card>
   );
 }
-    
-
-    

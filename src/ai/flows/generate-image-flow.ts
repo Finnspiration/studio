@@ -13,6 +13,7 @@ import {z} from 'genkit';
 
 const GenerateImageInputSchema = z.object({
   prompt: z.string().describe('The text prompt to generate an image from.'),
+  style: z.string().optional().describe('Optional: The desired artistic style for the image (e.g., "photorealistic", "cartoon").'),
 });
 export type GenerateImageInput = z.infer<typeof GenerateImageInputSchema>;
 
@@ -36,9 +37,11 @@ const generateImageFlow = ai.defineFlow(
     outputSchema: GenerateImageOutputSchema,
   },
   async (input) => {
+    const styledPrompt = input.style ? `${input.prompt}, in a ${input.style} style` : input.prompt;
+
     const { media } = await ai.generate({
       model: 'googleai/gemini-2.0-flash-exp', // IMPORTANT: Specific model for image generation
-      prompt: input.prompt,
+      prompt: styledPrompt, // Use the styled prompt
       config: {
         responseModalities: ['TEXT', 'IMAGE'], // MUST provide both
       },

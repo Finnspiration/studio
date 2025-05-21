@@ -30,7 +30,7 @@ export function WhiteboardPanel({
   const isSummarizingThemes = !!currentLoadingState && currentLoadingState.includes("Opsummerer");
 
   return (
-    <Card className="flex-1 flex flex-col h-full shadow-lg">
+    <Card className="flex-1 flex flex-col shadow-lg"> {/* Removed h-full */}
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Palette className="h-6 w-6 text-primary" />
@@ -43,8 +43,6 @@ export function WhiteboardPanel({
           </CardDescription>
         )}
       </CardHeader>
-      {/* CardContent is now flex-1 and handles scrolling.
-          Inside it, a single div uses space-y-4 for stacking children. */}
       <CardContent className="flex-1 overflow-y-auto">
         <div className="space-y-4">
           {/* Section 1: Whiteboard Content */}
@@ -67,7 +65,7 @@ export function WhiteboardPanel({
           
           {/* Section 2: Identified Themes */}
           { (identifiedThemes || isSummarizingThemes) && (
-            <div style={{ isolation: 'isolate' }}> {/* isolation for stacking context, just in case */}
+            <div style={{ isolation: 'isolate' }}>
               <Label className="mb-2 text-sm font-medium">AI Identificerede Temaer</Label>
               {isSummarizingThemes && !identifiedThemes ? ( 
                 <Skeleton className="h-10 w-full rounded-md" />

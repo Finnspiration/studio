@@ -153,7 +153,7 @@ export function ResultsPanel({
 
 
   return (
-    <Card className="shadow-lg">
+    <Card className="shadow-lg flex-1 flex flex-col">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Sparkles className="h-6 w-6 text-primary" />
@@ -163,9 +163,9 @@ export function ResultsPanel({
           Her vises resumé, temaer og nye indsigter genereret af AI. Du kan downloade resultaterne som PDF.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <ScrollArea className="max-h-[400px]"> 
-          <div className="space-y-6 pb-6"> {/* Added pb-6 here */}
+      <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
+        <ScrollArea className="flex-1 max-h-[400px]"> 
+          <div className="space-y-6 p-6 pb-6">
             <div>
               <h3 className="text-lg font-semibold mb-2 text-foreground">Resumé af Samtale</h3>
               {isLoadingSummary ? (
@@ -228,7 +228,7 @@ export function ResultsPanel({
             </div>
           </div>
         </ScrollArea>
-        <div className="pt-4 mt-4 border-t border-border">
+        <div className="p-6 pt-4 mt-auto border-t border-border">
           <Button 
             variant="default" 
             className="w-full sm:w-auto"

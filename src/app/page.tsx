@@ -287,7 +287,6 @@ export default function SynapseScribblePage() {
             <WhiteboardPanel
               whiteboardContent={whiteboardContent}
               setWhiteboardContent={setWhiteboardContent}
-              identifiedThemes={identifiedThemes} // Pass themes to WhiteboardPanel
               generatedImageDataUri={generatedImageDataUri}
               isGeneratingImage={isGeneratingImage}
               currentLoadingState={currentLoadingState()}

@@ -12,7 +12,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 interface WhiteboardPanelProps {
   whiteboardContent: string;
   setWhiteboardContent: Dispatch<SetStateAction<string>>;
-  identifiedThemes: string;
   generatedImageDataUri: string | null;
   isGeneratingImage: boolean;
   currentLoadingState: string | null;
@@ -21,13 +20,11 @@ interface WhiteboardPanelProps {
 export function WhiteboardPanel({ 
   whiteboardContent, 
   setWhiteboardContent, 
-  identifiedThemes,
   generatedImageDataUri, 
   isGeneratingImage,
   currentLoadingState
 }: WhiteboardPanelProps) {
   const isGeneratingWhiteboard = !!currentLoadingState && currentLoadingState.includes("Genererer whiteboard-idéer");
-  const isSummarizingThemes = !!currentLoadingState && currentLoadingState.includes("Opsummerer");
 
   return (
     <Card className="flex-1 flex flex-col shadow-lg">
@@ -43,10 +40,10 @@ export function WhiteboardPanel({
           </CardDescription>
         )}
       </CardHeader>
-      <CardContent className="flex-1 overflow-y-auto">
-        <div className="space-y-4">
+      <CardContent className="flex-1 flex flex-col overflow-y-auto">
+        <div className="flex-1 flex flex-col space-y-4">
           {/* Section 1: Whiteboard Content */}
-          <div>
+          <div className="flex flex-col flex-1">
             <Label htmlFor="whiteboard" className="mb-2 text-sm font-medium">Whiteboard Indhold (AI genereret, kan redigeres)</Label>
             <Textarea
               id="whiteboard"
@@ -57,32 +54,14 @@ export function WhiteboardPanel({
               }
               value={whiteboardContent}
               onChange={(e) => setWhiteboardContent(e.target.value)}
-              className="min-h-[120px] resize-none text-base bg-card" 
+              className="flex-1 resize-none text-base bg-card min-h-[120px]" 
               aria-label="Whiteboard indholdsområde"
               disabled={isGeneratingWhiteboard || isGeneratingImage}
             />
           </div>
           
-          {/* Section 2: Identified Themes */}
-          { (identifiedThemes || isSummarizingThemes) && (
-            <div style={{ isolation: 'isolate' }} className="mt-4">
-              <Label className="mb-2 text-sm font-medium">AI Identificerede Temaer</Label>
-              {isSummarizingThemes && !identifiedThemes ? ( 
-                <Skeleton className="h-10 w-full rounded-md" />
-              ) : identifiedThemes ? (
-                <div className="p-3 bg-muted rounded-md text-sm text-muted-foreground break-words max-h-32 overflow-y-auto">
-                  {identifiedThemes.split(',').map((theme, index) => (
-                    <span key={index} className="inline-block bg-accent/80 text-accent-foreground rounded-full px-3 py-1 text-xs font-semibold mr-2 mb-2 shadow-sm">
-                      {theme.trim()}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          )}
-
           {/* Section 3: Generated Image */}
-          <div className="mt-4">
+          <div className="mt-4 flex-shrink-0">
             <Label className="mb-2 text-sm font-medium">AI Genereret Billede</Label>
             <div className="w-full aspect-video bg-muted rounded-md flex items-center justify-center overflow-hidden border border-border relative">
               {isGeneratingImage ? (

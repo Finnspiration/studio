@@ -164,8 +164,8 @@ export function ResultsPanel({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <ScrollArea className="max-h-[400px] pr-3"> 
-          <div className="space-y-6">
+        <ScrollArea className="max-h-[400px]"> 
+          <div className="space-y-6 pb-6"> {/* Added pb-6 here */}
             <div>
               <h3 className="text-lg font-semibold mb-2 text-foreground">Resumé af Samtale</h3>
               {isLoadingSummary ? (

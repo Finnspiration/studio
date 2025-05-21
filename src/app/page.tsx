@@ -249,7 +249,7 @@ export default function SynapseScribblePage() {
 
   const handleUseInsights = (insights: string) => {
     setTranscription(insights); 
-    resetAIOutputs(); 
+    // resetAIOutputs(); // Fjernet for at lade indsigtsknappen forblive synlig
     toast({ 
       title: "Ny Samtale Startet", 
       description: "Indsigter er indsat. Klik på 'Start AI Analyse med Tekst' for at behandle." 

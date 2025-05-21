@@ -27,22 +27,22 @@ export function WhiteboardPanel({
 
   return (
     <Card className="flex-1 flex flex-col shadow-lg">
-      <CardHeader>
+      <CardHeader className="p-4"> {/* Reduced padding from p-6 to p-4 */}
         <CardTitle className="flex items-center gap-2">
           <Palette className="h-6 w-6 text-primary" />
           Whiteboard
         </CardTitle>
         {currentLoadingState && !currentLoadingState.includes("Optager") && (
-          <CardDescription className="flex items-center text-sm pt-2 text-primary">
+          <CardDescription className="flex items-center text-sm pt-1 text-primary"> {/* Adjusted pt for reduced header padding */}
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             {currentLoadingState}
           </CardDescription>
         )}
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col overflow-hidden p-0"> {/* Changed: p-6 to p-0 */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4"> {/* Added: wrapper div for padding and scroll */}
+      <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 flex flex-col"> {/* Added flex flex-col here */}
           {/* Section 1: Whiteboard Content */}
-          <div className="flex flex-col flex-1"> {/* Added flex-1 to allow this section to grow */}
+          <div className="flex flex-col flex-1"> 
             <Label htmlFor="whiteboard" className="mb-2 text-sm font-medium">Whiteboard Indhold (AI genereret, kan redigeres)</Label>
             <Textarea
               id="whiteboard"
@@ -60,7 +60,7 @@ export function WhiteboardPanel({
           </div>
           
           {/* Section 3: Generated Image */}
-          <div className="flex-shrink-0">
+          <div className="flex-shrink-0 mt-4"> {/* Added mt-4 for spacing, was handled by space-y before */}
             <Label className="mb-2 text-sm font-medium">AI Genereret Billede</Label>
             <div className="w-full aspect-video bg-muted rounded-md flex items-center justify-center overflow-hidden border border-border relative">
               {isGeneratingImage ? (

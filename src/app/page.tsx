@@ -8,6 +8,7 @@ import { WhiteboardPanel } from "@/components/whiteboard-panel";
 import { ControlsPanel } from "@/components/controls-panel";
 import { ResultsPanel } from "@/components/results-panel";
 import { useToast } from "@/hooks/use-toast";
+import jsPDF from 'jspdf';
 
 import { summarizeTranscription } from '@/ai/flows/summarize-transcription';
 import type { SummarizeTranscriptionInput, SummarizeTranscriptionOutput } from '@/ai/flows/summarize-transcription';
@@ -46,6 +47,10 @@ const FALLBACK_EMPTY_INSIGHTS = "Ingen specifikke nye indsigter kunne udledes.";
 
 
 export default function SynapseScribblePage() {
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [userOrganization, setUserOrganization] = useState('');
+
   const [activeTranscription, setActiveTranscription] = useState<string>("");
   const [activeSummary, setActiveSummary] = useState<string>(FALLBACK_EMPTY_SUMMARY);
   const [activeIdentifiedThemes, setActiveIdentifiedThemes] = useState<string>(FALLBACK_EMPTY_THEMES);
@@ -95,7 +100,7 @@ export default function SynapseScribblePage() {
 
   const handleNewCycleStart = (transcription: string, isFromInsights = false): boolean => {
     if (!isFromInsights && sessionCycles.length >= MAX_CYCLES) {
-      toast({ title: "Max cyklusser nået", description: `Du kan maksimalt have ${MAX_CYCLES} analysecyklusser. Start en ny session for flere.`, variant: "default" });
+      toast({ title: "Max cyklusser nået", description: `Du kan maksimalt have ${MAX_CYCLES} analysecyklusser. Nulstil sessionen for flere.`, variant: "default" });
       return false;
     }
     resetActiveCycleOutputs(!isFromInsights); 
@@ -110,6 +115,7 @@ export default function SynapseScribblePage() {
     }
     
     setIsTranscribing(true);
+    setActiveTranscription("Transskriberer..."); // Show loading in active transcription
     let transcriptionResultText = FALLBACK_EMPTY_TRANSCRIPTION;
     try {
       const input: TranscribeAudioInput = { audioDataUri };
@@ -147,6 +153,8 @@ export default function SynapseScribblePage() {
   const processSummaryAndThemes = async (transcriptionForAnalysis: string): Promise<Omit<CycleData, 'id' | 'whiteboardContent' | 'generatedImageDataUri' | 'newInsights'>> => {
     let currentSummary = FALLBACK_EMPTY_SUMMARY;
     let currentThemes = FALLBACK_EMPTY_THEMES;
+    setActiveSummary("Opsummerer..."); // Show loading in active summary
+    setActiveIdentifiedThemes("Identificerer temaer..."); // Show loading for themes
 
     if (transcriptionForAnalysis.startsWith("Fejl") || transcriptionForAnalysis === FALLBACK_EMPTY_TRANSCRIPTION || transcriptionForAnalysis.trim() === "" || transcriptionForAnalysis.startsWith("Optager lyd...")) {
       toast({ title: "Info", description: "Ugyldig transskription. Kan ikke opsummere/identificere temaer.", variant: "default" });
@@ -164,7 +172,6 @@ export default function SynapseScribblePage() {
           currentThemes = "Temaanalyse sprunget over pga. fejl i opsummering.";
         } else {
           currentSummary = summaryResult.summary;
-          setActiveSummary(currentSummary); 
           toast({ title: "Succes", description: "Transskription opsummeret." });
 
           const themesInput: IdentifyThemesInput = { textToAnalyze: currentSummary };
@@ -174,7 +181,6 @@ export default function SynapseScribblePage() {
             toast({ title: "Fejl ved temaanalyse", description: currentThemes, variant: "destructive" });
           } else {
             currentThemes = themesResult.identifiedThemesText;
-            setActiveIdentifiedThemes(currentThemes); 
             toast({ title: "Succes", description: "Temaer identificeret." });
           }
         }
@@ -194,6 +200,7 @@ export default function SynapseScribblePage() {
   
   const processGenerateWhiteboardIdeas = async (transcriptionCtx: string, themesCtx: string, summaryCtx: string): Promise<Omit<CycleData, 'id' | 'generatedImageDataUri' | 'newInsights'>> => {
     let currentWhiteboardContent = FALLBACK_EMPTY_WHITEBOARD;
+    setActiveWhiteboardContent("Genererer whiteboard-idéer..."); // Show loading
     if (transcriptionCtx.startsWith("Fejl") || summaryCtx.startsWith("Fejl") || themesCtx.startsWith("Fejl")) {
       toast({ title: "Info", description: "Forrige trin fejlede. Kan ikke generere whiteboard-idéer.", variant: "default" });
       currentWhiteboardContent = summaryCtx.startsWith("Fejl") ? summaryCtx : (themesCtx.startsWith("Fejl") ? themesCtx : "Whiteboard-generering sprunget over pga. tidligere fejl.");
@@ -207,7 +214,6 @@ export default function SynapseScribblePage() {
           toast({ title: "Fejl ved idégenerering", description: currentWhiteboardContent, variant: "destructive" });
         } else {
           currentWhiteboardContent = result.refinedWhiteboardContent;
-          setActiveWhiteboardContent(currentWhiteboardContent); 
           toast({ title: "Succes", description: "Whiteboard-indhold opdateret." });
         }
       } catch (error) {
@@ -241,6 +247,7 @@ export default function SynapseScribblePage() {
     contextForInsights: string
   ): Promise<Omit<CycleData, 'id' | 'newInsights'>> => {
     let currentImageDataUri = FALLBACK_EMPTY_IMAGE;
+    setActiveGeneratedImageDataUri("Genererer billede..."); // Show loading
     let coreImagePrompt = promptForImage;
     let imageStyleInstruction = "metaforisk og visuel whiteboard-tegning eller skitse. Minimalistisk, som en hurtig whiteboard-tegning med primært sort tusch på hvid baggrund, eventuelt med få accentfarver (blå/grøn). Undgå meget tekst; fokuser på symboler, metaforer, diagrammer eller simple abstrakte illustrationer. Format: widescreen 16:9.";
 
@@ -265,7 +272,6 @@ export default function SynapseScribblePage() {
           toast({ title: "Fejl ved billedgenerering", description: currentImageDataUri, variant: "destructive" });
         } else {
           currentImageDataUri = result.imageDataUri;
-          setActiveGeneratedImageDataUri(currentImageDataUri); 
           toast({ title: "Succes", description: "Billede genereret." });
         }
       } catch (error) {
@@ -289,6 +295,7 @@ export default function SynapseScribblePage() {
     conversationContext: string 
   ): Promise<Omit<CycleData, 'id'>> => {
     let currentNewInsights = FALLBACK_EMPTY_INSIGHTS;
+    setActiveNewInsights("Genererer nye indsigter..."); // Show loading
      if (imageDataUri.startsWith("Fejl") || imageDataUri === FALLBACK_EMPTY_IMAGE || imageDataUri.startsWith("Billedgenerering sprunget") ||
          conversationContext.startsWith("Fejl") || conversationContext === FALLBACK_EMPTY_SUMMARY) {
        toast({ title: "Info", description: "Forrige trin fejlede eller manglede input. Kan ikke generere indsigter.", variant: "default" });
@@ -303,7 +310,6 @@ export default function SynapseScribblePage() {
           toast({ title: "Fejl ved Indsigtsgenerering", description: currentNewInsights, variant: "destructive" });
         } else {
           currentNewInsights = result.insightsText;
-          setActiveNewInsights(currentNewInsights); 
           toast({ title: "Succes", description: "Nye AI-indsigter genereret." });
         }
       } catch (error) {
@@ -348,14 +354,13 @@ export default function SynapseScribblePage() {
     setSessionCycles(prevCycles => {
       const updatedCycles = [...prevCycles, newCycle];
       if (updatedCycles.length < MAX_CYCLES) {
-        // Only reset these for the "active" display if we can start a new cycle
         setActiveSummary(FALLBACK_EMPTY_SUMMARY);
         setActiveIdentifiedThemes(FALLBACK_EMPTY_THEMES);
         setActiveNewInsights(FALLBACK_EMPTY_INSIGHTS);
-        // Keep whiteboard and image from last cycle for display until new one starts
+        // Whiteboard and image are kept from the last cycle for display until a new one starts
       } else {
-        // Max cycles reached, reset all active outputs except transcription if it's from insights
-        resetActiveCycleOutputs(activeTranscription === dataForCycle.newInsights ? true : false);
+        // Max cycles reached, reset all active outputs except transcription if it was from insights
+        resetActiveCycleOutputs(activeTranscription === dataForCycle.newInsights);
       }
       return updatedCycles;
     });
@@ -370,7 +375,7 @@ export default function SynapseScribblePage() {
   };
   
   const handleResetSession = () => {
-    resetActiveCycleOutputs(true); 
+    resetActiveCycleOutputs(false); // keepTranscription = false
     setSessionCycles([]);
     setSessionReport(""); // Also reset the generated report
     toast({ title: "Session Nulstillet", description: "Alle data er ryddet. Du kan starte forfra." });
@@ -384,7 +389,6 @@ export default function SynapseScribblePage() {
     setIsGeneratingReport(true);
     setSessionReport("Genererer rapport...");
     try {
-      // Prepare data for the flow
       const cyclesForReport: CycleDataForReport[] = sessionCycles.map(cycle => ({
         id: cycle.id,
         transcription: cycle.transcription,
@@ -395,14 +399,16 @@ export default function SynapseScribblePage() {
         newInsights: cycle.newInsights,
       }));
 
-      // Potentially get these from InfoPanel state if it were lifted up
       const reportTitle = `AI Analyse Rapport - ${new Date().toLocaleDateString('da-DK')}`;
-      const projectName = "FraimeWorks Lite Session"; 
       
       const input: GenerateSessionReportInput = { 
         sessionCycles: cyclesForReport,
         reportTitle,
-        projectName,
+        projectName: userOrganization || "Ikke specificeret",
+        contactPersons: `${userName || "N/A"} (${userEmail || "N/A"})`,
+        userName: userName,
+        userEmail: userEmail,
+        userOrganization: userOrganization,
        };
       const result = await generateSessionReport(input);
 
@@ -423,7 +429,7 @@ export default function SynapseScribblePage() {
     }
   };
 
-  const handleDownloadSessionReport = () => {
+  const handleDownloadSessionReportAsMarkdown = () => {
     if (!sessionReport || sessionReport.trim() === "" || sessionReport.startsWith("Genererer") || sessionReport.startsWith("Fejl") || sessionReport.startsWith("Kunne ikke")) {
       toast({ title: "Ingen rapport", description: "Der er ingen rapport at downloade.", variant: "default" });
       return;
@@ -439,6 +445,77 @@ export default function SynapseScribblePage() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     toast({ title: "Download Startet", description: "Sessionsrapport downloades som Markdown-fil." });
+  };
+
+  const handleDownloadSessionReportAsPdf = () => {
+    if (!sessionReport || sessionReport.trim() === "" || sessionReport.startsWith("Genererer") || sessionReport.startsWith("Fejl") || sessionReport.startsWith("Kunne ikke")) {
+      toast({ title: "Ingen rapport", description: "Der er ingen rapport at downloade som PDF.", variant: "default" });
+      return;
+    }
+
+    try {
+      const doc = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageHeight = doc.internal.pageSize.height;
+      const pageWidth = doc.internal.pageSize.width;
+      const margin = 15;
+      let currentY = margin;
+      const lineHeight = 6; // Approximate line height in mm
+
+      // Helper to add text and handle page breaks
+      const addText = (text: string, size: number, style: string | string[] = 'normal', indent = 0) => {
+        doc.setFontSize(size);
+        doc.setFont('helvetica', style); // Use a standard font
+        const lines = doc.splitTextToSize(text, pageWidth - margin * 2 - indent);
+        lines.forEach((line: string) => {
+          if (currentY + lineHeight > pageHeight - margin) {
+            doc.addPage();
+            currentY = margin;
+          }
+          doc.text(line, margin + indent, currentY);
+          currentY += lineHeight;
+        });
+      };
+      
+      const reportLines = sessionReport.split('\n');
+
+      reportLines.forEach(line => {
+        if (line.startsWith('# Rapporttitel:')) { // H1 for main title
+            addText(line.substring(2), 18, 'bold');
+            currentY += lineHeight / 2; // Extra space after main title
+        } else if (line.startsWith('## ')) { // H2
+          currentY += lineHeight / 2; // Space before H2
+          addText(line.substring(3), 14, 'bold');
+          currentY += lineHeight / 4;
+        } else if (line.startsWith('### ')) { // H3
+          currentY += lineHeight / 4; // Space before H3
+          addText(line.substring(4), 12, 'bold');
+        } else if (line.startsWith('*   ')) { // List item
+          addText(`• ${line.substring(4)}`, 10, 'normal', 5); // Indent list items
+        } else if (line.startsWith('-   ')) { // Alternative list item
+          addText(`• ${line.substring(4)}`, 10, 'normal', 5);
+        } else if (line.startsWith('---')) { // Separator
+           if (currentY + 5 > pageHeight - margin) { doc.addPage(); currentY = margin; }
+           doc.line(margin, currentY, pageWidth - margin, currentY);
+           currentY += 5;
+        } else {
+          addText(line, 10);
+        }
+      });
+      
+      const timestamp = new Date().toISOString().split('T')[0];
+      doc.save(`FraimeWorksLite_SessionRapport_${timestamp}.pdf`);
+      toast({ title: "PDF Download Startet", description: "Sessionsrapport downloades som PDF-fil." });
+
+    } catch (error) {
+        console.error("Fejl ved PDF-generering af sessionsrapport:", error);
+        const userMessage = getAIUserErrorMessage(error, "Fejl ved PDF-generering af sessionsrapport");
+        toast({ title: "Fejl", description: userMessage, variant: "destructive" });
+    }
   };
 
 
@@ -466,7 +543,7 @@ export default function SynapseScribblePage() {
                                      activeGeneratedImageDataUri === FALLBACK_EMPTY_IMAGE &&
                                      activeNewInsights === FALLBACK_EMPTY_INSIGHTS;
   
-  if (!isAnyAIProcessRunning && !isPreparingNewCycleViaText && sessionCycles.length > 0) {
+  if (!isAnyAIProcessRunning && !isPreparingNewCycleViaText && sessionCycles.length > 0 && activeTranscription === "" && activeSummary === FALLBACK_EMPTY_SUMMARY) {
     const lastCompletedCycle = sessionCycles[sessionCycles.length - 1];
     if (lastCompletedCycle) {
         if (wbContentToShow === FALLBACK_EMPTY_WHITEBOARD) wbContentToShow = lastCompletedCycle.whiteboardContent;
@@ -478,7 +555,12 @@ export default function SynapseScribblePage() {
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <AppHeader />
       <main className="flex-1 flex flex-col gap-4 p-4 container mx-auto">
-        <InfoPanel />
+        <InfoPanel 
+            userName={userName} setUserName={setUserName}
+            userEmail={userEmail} setUserEmail={setUserEmail}
+            userOrganization={userOrganization} setUserOrganization={setUserOrganization}
+            maxCycles={MAX_CYCLES}
+        />
         <div className="flex flex-col gap-4">
           <ControlsPanel
             transcription={activeTranscription} 
@@ -491,6 +573,8 @@ export default function SynapseScribblePage() {
             isAnyAIProcessRunning={isAnyAIProcessRunning || isRecording}
             currentLoadingStateForControls={currentLoadingStateText()}
             canStartNewCycle={sessionCycles.length < MAX_CYCLES}
+            sessionCyclesLength={sessionCycles.length}
+            maxCycles={MAX_CYCLES}
           />
           <WhiteboardPanel
             whiteboardContent={wbContentToShow}
@@ -518,7 +602,6 @@ export default function SynapseScribblePage() {
               summary: FALLBACK_EMPTY_SUMMARY,
               themes: FALLBACK_EMPTY_THEMES,
               insights: FALLBACK_EMPTY_INSIGHTS,
-              // These are not directly used by ResultsPanel for its active display but good for consistency
               whiteboard: FALLBACK_EMPTY_WHITEBOARD, 
               image: FALLBACK_EMPTY_IMAGE,           
               transcription: FALLBACK_EMPTY_TRANSCRIPTION 
@@ -526,7 +609,12 @@ export default function SynapseScribblePage() {
             sessionReport={sessionReport}
             isGeneratingReport={isGeneratingReport}
             onGenerateSessionReport={handleGenerateSessionReport}
-            onDownloadSessionReport={handleDownloadSessionReport}
+            onDownloadSessionReportAsMarkdown={handleDownloadSessionReportAsMarkdown}
+            onDownloadSessionReportAsPdf={handleDownloadSessionReportAsPdf}
+            userName={userName}
+            userEmail={userEmail}
+            userOrganization={userOrganization}
+            maxCycles={MAX_CYCLES}
           />
         </div>
       </main>

@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Dispatch, SetStateAction } from 'react';
@@ -11,19 +10,19 @@ import { Mic, Square, Loader2, PlaySquare, RotateCcw } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-const MAX_CYCLES_CONTROLS = 5; 
-
 interface ControlsPanelProps {
   transcription: string;
   setTranscription: Dispatch<SetStateAction<string>>;
   isRecording: boolean;
   setIsRecording: Dispatch<SetStateAction<boolean>>;
-  onAudioTranscription: (audioDataUri: string) => Promise<any>; // Return type can be more specific
+  onAudioTranscription: (audioDataUri: string) => Promise<any>; 
   onStartAnalysisFromText: (transcription: string) => Promise<any>; 
   onResetSession: () => void;
   isAnyAIProcessRunning: boolean;
   currentLoadingStateForControls: string | null;
   canStartNewCycle: boolean;
+  sessionCyclesLength: number;
+  maxCycles: number;
 }
 
 export function ControlsPanel({
@@ -37,6 +36,8 @@ export function ControlsPanel({
   isAnyAIProcessRunning,
   currentLoadingStateForControls,
   canStartNewCycle,
+  sessionCyclesLength,
+  maxCycles,
 }: ControlsPanelProps) {
   const { toast } = useToast();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -55,12 +56,12 @@ export function ControlsPanel({
       }
       setIsRecording(false); 
     } else if (hasTextContentForAnalysis && !isAnyAIProcessRunning) {
-      if(!canStartNewCycle && !transcription.startsWith("Nye AI Indsigter:")) {
-        toast({ title: "Max cyklusser nået", description: `Du kan ikke starte flere analysecyklusser. Nulstil sessionen for at starte forfra.`, variant: "default" });
+      if(!canStartNewCycle && !transcription.startsWith("Nye AI Indsigter:") && !transcription.startsWith("Ingen specifikke nye indsigter kunne udledes på grund af manglende input.")) { // Allow using insights even if max cycles reached for NEW audio/text
+        toast({ title: "Max cyklusser nået", description: `Du kan ikke starte flere nye analysecyklusser. Nulstil sessionen for at starte forfra.`, variant: "default" });
         return;
       }
       await onStartAnalysisFromText(transcription);
-    } else if (!hasTextContentForAnalysis && !isAnyAIProcessRunning) { // Starter en ny optagelse
+    } else if (!hasTextContentForAnalysis && !isAnyAIProcessRunning) { 
       if (!canStartNewCycle) {
          toast({ title: "Max cyklusser nået", description: `Du kan ikke starte flere nye analysecyklusser via optagelse. Nulstil sessionen for at starte forfra.`, variant: "default" });
         return;
@@ -128,9 +129,9 @@ export function ControlsPanel({
     buttonText = "Start AI Analyse med Tekst";
     ButtonIconComponent = PlaySquare; 
     buttonVariant = "default";
-    if(!canStartNewCycle && !transcription.startsWith("Nye AI Indsigter:") && !transcription.startsWith("Ingen specifikke nye indsigter")){ 
+    if(!canStartNewCycle && !transcription.startsWith("Nye AI Indsigter:") && !transcription.startsWith("Ingen specifikke nye indsigter kunne udledes på grund af manglende input.")){ 
         primaryButtonDisabled = true;
-        buttonText = `Max ${MAX_CYCLES_CONTROLS} cyklusser nået`;
+        buttonText = `Max ${maxCycles} cyklusser nået`;
     }
   } else { 
     buttonText = "Start Lydoptagelse";
@@ -138,7 +139,7 @@ export function ControlsPanel({
     buttonVariant = "outline";
     if(!canStartNewCycle){
         primaryButtonDisabled = true;
-        buttonText = `Max ${MAX_CYCLES_CONTROLS} cyklusser nået`;
+        buttonText = `Max ${maxCycles} cyklusser nået`;
     }
   }
   
@@ -146,10 +147,10 @@ export function ControlsPanel({
     <Card className="flex-1 flex flex-col shadow-lg">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          AI Kontrol & Analyse
+          AI Kontrol &amp; Analyse
         </CardTitle>
         <CardDescription>
-          Start med lydoptagelse eller indtast tekst. AI'en vil derefter automatisk analysere, generere idéer, billede og indsigter. Max {MAX_CYCLES_CONTROLS} cyklusser.
+          Start med lydoptagelse eller indtast tekst. AI&apos;en vil derefter automatisk analysere. ({sessionCyclesLength} / {maxCycles} cyklusser gennemført)
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
@@ -186,7 +187,7 @@ export function ControlsPanel({
                 placeholder={
                   isRecording ? "Lytter... (optagelse aktiv)" : 
                   currentLoadingStateForControls && !isRecording ? `${currentLoadingStateForControls}... vent venligst.` :
-                  !canStartNewCycle && !hasTextContentForAnalysis && !isRecording ? `Maksimalt antal (${MAX_CYCLES_CONTROLS}) nye analysecyklusser er nået. Nulstil sessionen for at starte forfra.` :
+                  !canStartNewCycle && !hasTextContentForAnalysis && !isRecording ? `Maksimalt antal (${maxCycles}) nye analysecyklusser er nået. Nulstil sessionen for at starte forfra.` :
                   "Start optagelse, skriv/indsæt samtaletransskription her, eller brug genererede indsigter..."
                 }
                 value={transcription}
@@ -209,5 +210,3 @@ export function ControlsPanel({
     </Card>
   );
 }
-
-    

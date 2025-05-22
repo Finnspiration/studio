@@ -11,7 +11,7 @@ import { Mic, Square, Loader2, PlaySquare } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-const MAX_CYCLES_CONTROLS = 2; // Skal matche page.tsx
+const MAX_CYCLES_CONTROLS = 5; // Skal matche page.tsx - Updated from 2 to 5
 
 interface ControlsPanelProps {
   transcription: string;

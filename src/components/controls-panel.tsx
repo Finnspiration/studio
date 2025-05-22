@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Dispatch, SetStateAction } from 'react';
@@ -6,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Mic, Square, Loader2, PlaySquare, RotateCcw } from 'lucide-react';
+import { Mic, Square, Loader2, PlaySquare, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -94,6 +95,7 @@ export function ControlsPanel({
 
         mediaRecorderRef.current.start();
         setIsRecording(true);
+        setTranscription("Optager lyd... Klik igen for at stoppe og starte AI-analyse.");
       } catch (error) {
         console.error("Fejl ved adgang til mikrofon:", error);
         toast({ title: "Fejl", description: "Kunne ikke starte optagelse. Tjek mikrofontilladelser.", variant: "destructive" });
@@ -147,6 +149,7 @@ export function ControlsPanel({
     <Card className="flex-1 flex flex-col shadow-lg">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
+          <SlidersHorizontal className="h-6 w-6 text-primary" /> 
           AI Kontrol &amp; Analyse
         </CardTitle>
         <CardDescription>
@@ -210,3 +213,5 @@ export function ControlsPanel({
     </Card>
   );
 }
+
+    

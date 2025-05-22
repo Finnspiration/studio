@@ -2,24 +2,25 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from 'react';
-import { useRef, useState, useEffect } from 'react';
+import { useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Mic, Square, Loader2, PlaySquare } from 'lucide-react';
+import { Mic, Square, Loader2, PlaySquare, RotateCcw } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-const MAX_CYCLES_CONTROLS = 5; // Skal matche page.tsx - Updated from 2 to 5
+const MAX_CYCLES_CONTROLS = 5; 
 
 interface ControlsPanelProps {
   transcription: string;
   setTranscription: Dispatch<SetStateAction<string>>;
   isRecording: boolean;
   setIsRecording: Dispatch<SetStateAction<boolean>>;
-  onAudioTranscription: (audioDataUri: string) => Promise<void>;
-  onStartAnalysisFromText: (transcription: string) => Promise<void>; 
+  onAudioTranscription: (audioDataUri: string) => Promise<any>; // Return type can be more specific
+  onStartAnalysisFromText: (transcription: string) => Promise<any>; 
+  onResetSession: () => void;
   isAnyAIProcessRunning: boolean;
   currentLoadingStateForControls: string | null;
   canStartNewCycle: boolean;
@@ -32,6 +33,7 @@ export function ControlsPanel({
   setIsRecording,
   onAudioTranscription,
   onStartAnalysisFromText, 
+  onResetSession,
   isAnyAIProcessRunning,
   currentLoadingStateForControls,
   canStartNewCycle,
@@ -40,37 +42,27 @@ export function ControlsPanel({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   
-  const hasTextContentForAnalysis = transcription.trim().length > 0 && !isRecording && !currentLoadingStateForControls?.includes("Optager lyd");
+  const hasTextContentForAnalysis = transcription.trim().length > 0 && 
+                                   !isRecording && 
+                                   !currentLoadingStateForControls?.includes("Optager lyd") &&
+                                   transcription !== "Optager lyd... Klik igen for at stoppe og starte AI-analyse.";
 
 
   const handlePrimaryAction = async () => {
-    if (!canStartNewCycle && !isRecording && !isAnyAIProcessRunning && !hasTextContentForAnalysis) {
-       // Tillad analyse af eksisterende tekst selvom max cyklus er nået, hvis teksten *ikke* er fra en ny optagelse
-      toast({ title: "Max cyklusser nået", description: `Du kan ikke starte flere nye analysecyklusser via optagelse. Du kan stadig analysere eksisterende tekst.`, variant: "default" });
-      return;
-    }
-     if (!canStartNewCycle && !isRecording && !isAnyAIProcessRunning && hasTextContentForAnalysis) {
-      // Dette er OK, brugeren vil analysere eksisterende tekst.
-    }
-
-
     if (isRecording) {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.stop(); 
       }
-      setIsRecording(false); // Dette vil trigge onstop handleren
+      setIsRecording(false); 
     } else if (hasTextContentForAnalysis && !isAnyAIProcessRunning) {
-      if(!canStartNewCycle && transcription.startsWith("Nye AI Indsigter:")){
-         // Hvis max cyklusser er nået, men teksten er indsigter, tillad stadig.
-         // (Denne logik kan forfines yderligere, men for nu tillader vi det)
-      } else if (!canStartNewCycle) {
-        toast({ title: "Max cyklusser nået", description: `Du kan ikke starte flere analysecyklusser.`, variant: "default" });
+      if(!canStartNewCycle && !transcription.startsWith("Nye AI Indsigter:")) {
+        toast({ title: "Max cyklusser nået", description: `Du kan ikke starte flere analysecyklusser. Nulstil sessionen for at starte forfra.`, variant: "default" });
         return;
       }
       await onStartAnalysisFromText(transcription);
     } else if (!hasTextContentForAnalysis && !isAnyAIProcessRunning) { // Starter en ny optagelse
       if (!canStartNewCycle) {
-         toast({ title: "Max cyklusser nået", description: `Du kan ikke starte flere nye analysecyklusser via optagelse.`, variant: "default" });
+         toast({ title: "Max cyklusser nået", description: `Du kan ikke starte flere nye analysecyklusser via optagelse. Nulstil sessionen for at starte forfra.`, variant: "default" });
         return;
       }
       try {
@@ -101,7 +93,6 @@ export function ControlsPanel({
 
         mediaRecorderRef.current.start();
         setIsRecording(true);
-        // setTranscription styres nu af page.tsx's handleNewCycleStart
       } catch (error) {
         console.error("Fejl ved adgang til mikrofon:", error);
         toast({ title: "Fejl", description: "Kunne ikke starte optagelse. Tjek mikrofontilladelser.", variant: "destructive" });
@@ -137,12 +128,11 @@ export function ControlsPanel({
     buttonText = "Start AI Analyse med Tekst";
     ButtonIconComponent = PlaySquare; 
     buttonVariant = "default";
-    if(!canStartNewCycle && !transcription.startsWith("Nye AI Indsigter:")){ // Hvis max cyklusser er nået, og det ikke er indsigter
+    if(!canStartNewCycle && !transcription.startsWith("Nye AI Indsigter:") && !transcription.startsWith("Ingen specifikke nye indsigter")){ 
         primaryButtonDisabled = true;
         buttonText = `Max ${MAX_CYCLES_CONTROLS} cyklusser nået`;
     }
-
-  } else { // Ingen tekst, klar til optagelse
+  } else { 
     buttonText = "Start Lydoptagelse";
     ButtonIconComponent = Mic;
     buttonVariant = "outline";
@@ -167,17 +157,28 @@ export function ControlsPanel({
           <div className="p-6 space-y-6">
             <div className="space-y-2">
               <Label htmlFor="transcription" className="text-sm font-medium">Samtale (Optag, Rediger, eller Indsæt Tekst)</Label>
-              <div className="flex gap-2 mb-2">
+              <div className="flex flex-col sm:flex-row gap-2 mb-2">
                 <Button 
                   onClick={handlePrimaryAction} 
                   variant={buttonVariant}
                   size="lg" 
-                  className="w-full"
+                  className="flex-1"
                   aria-label={buttonText}
                   disabled={primaryButtonDisabled}
                 >
                   <ButtonIconComponent className={`mr-2 h-5 w-5 ${iconAnimationClass}`} />
                   {buttonText}
+                </Button>
+                <Button
+                  onClick={onResetSession}
+                  variant="outline"
+                  size="lg"
+                  className="sm:w-auto"
+                  aria-label="Nulstil Session"
+                  disabled={isAnyAIProcessRunning || isRecording}
+                >
+                  <RotateCcw className="mr-2 h-5 w-5" />
+                  Nulstil Session
                 </Button>
               </div>
               <Textarea
@@ -185,7 +186,7 @@ export function ControlsPanel({
                 placeholder={
                   isRecording ? "Lytter... (optagelse aktiv)" : 
                   currentLoadingStateForControls && !isRecording ? `${currentLoadingStateForControls}... vent venligst.` :
-                  !canStartNewCycle && !hasTextContentForAnalysis ? `Maksimalt antal (${MAX_CYCLES_CONTROLS}) nye analysecyklusser via optagelse er nået.` :
+                  !canStartNewCycle && !hasTextContentForAnalysis && !isRecording ? `Maksimalt antal (${MAX_CYCLES_CONTROLS}) nye analysecyklusser er nået. Nulstil sessionen for at starte forfra.` :
                   "Start optagelse, skriv/indsæt samtaletransskription her, eller brug genererede indsigter..."
                 }
                 value={transcription}

@@ -150,11 +150,14 @@ export function ControlsPanel({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <SlidersHorizontal className="h-6 w-6 text-primary" /> 
-          AI Kontrol &amp; Analyse
+          AI Kontrol & Analyse
         </CardTitle>
         <CardDescription>
-          Start med lydoptagelse eller indtast tekst. AI&apos;en vil derefter automatisk analysere. ({sessionCyclesLength} / {maxCycles} cyklusser gennemført)
+          Start med lydoptagelse eller indtast tekst. AI&apos;en vil derefter automatisk analysere.
         </CardDescription>
+        <div className="text-sm text-muted-foreground pt-1">
+          ({sessionCyclesLength} / {maxCycles} cyklusser gennemført)
+        </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
         <ScrollArea className="flex-1">
@@ -213,5 +216,3 @@ export function ControlsPanel({
     </Card>
   );
 }
-
-    

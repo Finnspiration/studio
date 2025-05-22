@@ -249,7 +249,6 @@ export default function SynapseScribblePage() {
 
   const handleUseInsights = (insights: string) => {
     setTranscription(insights); 
-    // resetAIOutputs(); // Fjernet for at lade indsigtsknappen forblive synlig
     toast({ 
       title: "Ny Samtale Startet", 
       description: "Indsigter er indsat. Klik på 'Start AI Analyse med Tekst' for at behandle." 
@@ -270,8 +269,8 @@ export default function SynapseScribblePage() {
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <AppHeader />
       <main className="flex-1 flex flex-col gap-4 p-4 container mx-auto">
-        <div className="flex flex-col md:flex-row gap-4 flex-grow md:max-h-[calc(100vh-200px)]">
-          <div className="md:w-1/2 lg:w-2/5 h-full flex flex-col">
+        <div className="flex flex-col gap-4 flex-grow">
+          <div className="w-full flex flex-col">
             <ControlsPanel
               transcription={transcription}
               setTranscription={setTranscription}
@@ -283,7 +282,7 @@ export default function SynapseScribblePage() {
               currentLoadingStateForControls={currentLoadingState()}
             />
           </div>
-          <div className="md:w-1/2 lg:w-3/5 h-full flex flex-col">
+          <div className="w-full flex flex-col">
             <WhiteboardPanel
               whiteboardContent={whiteboardContent}
               setWhiteboardContent={setWhiteboardContent}

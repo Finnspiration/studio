@@ -6,7 +6,7 @@ import jsPDF from 'jspdf';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Sparkles, MessageSquarePlus, Download, Brain } from 'lucide-react'; // Ændret ikon
+import { Loader2, Sparkles, MessageSquarePlus, Download, Brain } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import type { CycleData } from '@/app/page'; 
@@ -160,8 +160,56 @@ export function ResultsPanel({
     }
   };
 
-  // Viser den seneste afsluttede cyklus først, eller den aktive hvis ingen er afsluttet
   const reversedCycles = [...sessionCycles].reverse();
+  const isProcessingAnyActiveData = isLoadingActiveSummaryAndThemes || isLoadingActiveInsights;
+
+  const ActiveCycleDisplay = () => (
+    <div className={`mb-8 p-4 border border-border rounded-lg shadow-sm bg-card ${isAnyAIProcessRunning || isProcessingAnyActiveData ? 'border-primary animate-pulse' : ''}`}>
+      <h3 className="text-xl font-semibold mb-3 text-primary">Igangværende Cyklus {sessionCycles.length + 1}</h3>
+      <div>
+        <h4 className="text-lg font-semibold mb-1 text-foreground">Resumé af Samtale</h4>
+        {isLoadingActiveSummaryAndThemes ? (
+          <div className="space-y-2 mt-1">
+            <Skeleton className="h-4 w-full" /> <Skeleton className="h-4 w-4/5" />
+          </div>
+        ) : activeCycleData.summary ? (
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{activeCycleData.summary}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground italic">{isAnyAIProcessRunning ? "Bearbejder..." : "Intet resumé tilgængeligt."}</p>
+        )}
+      </div>
+      <Separator className="my-3" />
+      <div>
+        <h4 className="text-lg font-semibold mb-1 text-foreground">Identificerede Temaer</h4>
+        {isLoadingActiveSummaryAndThemes ? (
+           <Skeleton className="h-8 w-full rounded-md mt-1" />
+        ) : activeCycleData.identifiedThemes ? (
+          <div className="flex flex-wrap gap-2">
+            {activeCycleData.identifiedThemes.split(',').map((theme, index) => (
+              <span key={index} className="inline-block bg-accent/80 text-accent-foreground rounded-full px-3 py-1 text-xs font-semibold shadow-sm">
+                {theme.trim()}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground italic">{isAnyAIProcessRunning ? "Bearbejder..." : "Ingen temaer identificeret."}</p>
+        )}
+      </div>
+      <Separator className="my-3" />
+      <div>
+        <h4 className="text-lg font-semibold mb-1 text-foreground">Nye AI Indsigter</h4>
+        {isLoadingActiveInsights ? (
+          <div className="flex items-center text-sm text-muted-foreground p-2 bg-muted rounded-md mt-1">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Genererer nye indsigter...
+          </div>
+        ) : activeCycleData.newInsights ? (
+          <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{activeCycleData.newInsights}</p>
+        ) : (
+           <p className="text-sm text-muted-foreground italic">{isAnyAIProcessRunning ? "Bearbejder..." : "Ingen nye indsigter genereret."}</p>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <Card className="shadow-lg flex-1 flex flex-col">
@@ -171,59 +219,15 @@ export function ResultsPanel({
           AI Analyse Resultater
         </CardTitle>
         <CardDescription>
-          Her vises resultater fra dine analysecyklusser. Du kan downloade den seneste cyklus som PDF.
+          Her vises resultater fra dine analysecyklusser. Du kan downloade den seneste afsluttede cyklus som PDF.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
         <ScrollArea className="flex-1 max-h-[calc(100vh-350px)]"> 
-          <div className="space-y-0 p-6 pb-6"> {/* Ændret space-y til 0 for at undgå dobbelt margin med mb-8 på cycle div */}
-            {/* Visning for den aktive/igangværende cyklus, hvis nogen AI proces kører OG der ikke er nogen afsluttede cyklusser endnu */}
-            {(isAnyAIProcessRunning && sessionCycles.length === 0) && (
-              <div className="mb-8 p-4 border border-border rounded-lg shadow-sm bg-card border-primary animate-pulse">
-                 <h3 className="text-xl font-semibold mb-3 text-primary">Igangværende Cyklus 1</h3>
-                <div>
-                  <h4 className="text-lg font-semibold mb-1 text-foreground">Resumé af Samtale</h4>
-                  {isLoadingActiveSummaryAndThemes ? (
-                    <div className="space-y-2 mt-1">
-                      <Skeleton className="h-4 w-full" /> <Skeleton className="h-4 w-4/5" />
-                    </div>
-                  ) : activeCycleData.summary ? (
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{activeCycleData.summary}</p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">Genererer resumé...</p>
-                  )}
-                </div>
-                <Separator className="my-3" />
-                <div>
-                  <h4 className="text-lg font-semibold mb-1 text-foreground">Identificerede Temaer</h4>
-                  {isLoadingActiveSummaryAndThemes ? (
-                     <Skeleton className="h-8 w-full rounded-md mt-1" />
-                  ) : activeCycleData.identifiedThemes ? (
-                    <div className="flex flex-wrap gap-2">
-                      {activeCycleData.identifiedThemes.split(',').map((theme, index) => (
-                        <span key={index} className="inline-block bg-accent/80 text-accent-foreground rounded-full px-3 py-1 text-xs font-semibold shadow-sm">
-                          {theme.trim()}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">Identificerer temaer...</p>
-                  )}
-                </div>
-                <Separator className="my-3" />
-                <div>
-                  <h4 className="text-lg font-semibold mb-1 text-foreground">Nye AI Indsigter</h4>
-                  {isLoadingActiveInsights ? (
-                    <div className="flex items-center text-sm text-muted-foreground p-2 bg-muted rounded-md mt-1">
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Genererer nye indsigter...
-                    </div>
-                  ) : activeCycleData.newInsights ? (
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{activeCycleData.newInsights}</p>
-                  ) : (
-                     <p className="text-sm text-muted-foreground italic">Afventer generering af indsigter...</p>
-                  )}
-                </div>
-              </div>
+          <div className="space-y-0 p-6 pb-6">
+            {/* Visning for den aktive/igangværende cyklus, hvis en AI-proces kører */}
+            {(isAnyAIProcessRunning || isProcessingAnyActiveData) && (
+              <ActiveCycleDisplay />
             )}
 
             {reversedCycles.map((cycle, index) => (
@@ -258,10 +262,16 @@ export function ResultsPanel({
                   </p>
                   {cycle.newInsights && (
                      <Button
-                        onClick={() => onUseInsightsForNewCycle(cycle.newInsights)}
+                        onClick={() => {
+                          if (cycle.newInsights && cycle.newInsights.trim() !== "" && !cycle.newInsights.startsWith("Ingen specifikke")) {
+                            onUseInsightsForNewCycle(cycle.newInsights);
+                          } else {
+                            toast({title: "Info", description: "Disse indsigter kan ikke bruges til en ny cyklus.", variant: "default"})
+                          }
+                        }}
                         variant="outline"
                         className="w-full sm:w-auto mt-2"
-                        disabled={isAnyAIProcessRunning || !canStartNewCycle}
+                        disabled={isAnyAIProcessRunning || !canStartNewCycle || !cycle.newInsights || cycle.newInsights.trim() === "" || cycle.newInsights.startsWith("Ingen specifikke")}
                         aria-label={`Brug indsigter fra cyklus ${sessionCycles.length - index} til ny samtale`}
                       >
                         <MessageSquarePlus className="mr-2 h-4 w-4" />
@@ -269,60 +279,13 @@ export function ResultsPanel({
                       </Button>
                   )}
                 </div>
-                 {index < sessionCycles.length -1 && <Separator className="my-6 border-dashed" />}
+                 {index < sessionCycles.length -1 && !(isAnyAIProcessRunning || isProcessingAnyActiveData && index === 0) && <Separator className="my-6 border-dashed" />}
               </div>
             ))}
-             {/* Visning for den aktive/igangværende cyklus, hvis den kører OG der er afsluttede cyklusser */}
-            {(isAnyAIProcessRunning && sessionCycles.length > 0) && (
-              <div className="mt-8 pt-6 border-t border-dashed p-4 border-border rounded-lg shadow-sm bg-card animate-pulse">
-                 <h3 className="text-xl font-semibold mb-3 text-primary">Igangværende Cyklus {sessionCycles.length + 1}</h3>
-                 {/* ... indhold for aktiv cyklus, identisk med ovenstående ... */}
-                 <div>
-                  <h4 className="text-lg font-semibold mb-1 text-foreground">Resumé af Samtale</h4>
-                  {isLoadingActiveSummaryAndThemes ? (
-                    <div className="space-y-2 mt-1">
-                      <Skeleton className="h-4 w-full" /> <Skeleton className="h-4 w-4/5" />
-                    </div>
-                  ) : activeCycleData.summary ? (
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{activeCycleData.summary}</p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">Genererer resumé...</p>
-                  )}
-                </div>
-                <Separator className="my-3" />
-                <div>
-                  <h4 className="text-lg font-semibold mb-1 text-foreground">Identificerede Temaer</h4>
-                  {isLoadingActiveSummaryAndThemes ? (
-                     <Skeleton className="h-8 w-full rounded-md mt-1" />
-                  ) : activeCycleData.identifiedThemes ? (
-                    <div className="flex flex-wrap gap-2">
-                      {activeCycleData.identifiedThemes.split(',').map((theme, idx) => (
-                        <span key={idx} className="inline-block bg-accent/80 text-accent-foreground rounded-full px-3 py-1 text-xs font-semibold shadow-sm">
-                          {theme.trim()}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">Identificerer temaer...</p>
-                  )}
-                </div>
-                <Separator className="my-3" />
-                <div>
-                  <h4 className="text-lg font-semibold mb-1 text-foreground">Nye AI Indsigter</h4>
-                  {isLoadingActiveInsights ? (
-                    <div className="flex items-center text-sm text-muted-foreground p-2 bg-muted rounded-md mt-1">
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Genererer nye indsigter...
-                    </div>
-                  ) : activeCycleData.newInsights ? (
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{activeCycleData.newInsights}</p>
-                  ) : (
-                     <p className="text-sm text-muted-foreground italic">Afventer generering af indsigter...</p>
-                  )}
-                </div>
-              </div>
+            
+            {sessionCycles.length === 0 && !isAnyAIProcessRunning && !isProcessingAnyActiveData && (
+                <p className="text-sm text-muted-foreground text-center py-10">Ingen analysecyklusser er kørt endnu. Start en analyse i kontrolpanelet.</p>
             )}
-
-
           </div>
         </ScrollArea>
         
@@ -331,7 +294,7 @@ export function ResultsPanel({
             variant="default" 
             className="w-full sm:w-auto"
             onClick={handleGeneratePdf}
-            disabled={isAnyAIProcessRunning && sessionCycles.length === 0}
+            disabled={isAnyAIProcessRunning && sessionCycles.length === 0} // Knappen er kun deaktiveret hvis en AI proces kører OG ingen cyklusser er afsluttet
             aria-label="Download resultater fra seneste afsluttede cyklus som PDF"
           >
             <Download className="mr-2 h-4 w-4" />
@@ -342,5 +305,3 @@ export function ResultsPanel({
     </Card>
   );
 }
-
-    

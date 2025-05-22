@@ -40,6 +40,7 @@ const prompt = ai.definePrompt({
   prompt: `Du er en AI-assistent, der specialiserer sig i at udlede dybere indsigter fra en kombination af en samtale og et visuelt billede relateret til samtalen.
 Analysér følgende samtale kontekst og det tilhørende billede. Generer 2-3 nye, tankevækkende indsigter, spørgsmål eller idéer, der kan bruges som udgangspunkt for en ny samtale eller videre refleksion.
 Formuler indsigterne som en sammenhængende tekst, der er klar til at blive brugt som input til en ny diskussion. Svar på dansk.
+Hvis du ikke kan udlede meningsfulde indsigter, svar da med "Ingen specifikke nye indsigter kunne udledes."
 
 Samtale Kontekst:
 {{{conversationContext}}}
@@ -64,6 +65,9 @@ const generateInsightsFlow = ai.defineFlow(
     const {output} = await prompt(input);
     if (!output) {
         throw new Error("Kunne ikke generere indsigter fra AI.");
+    }
+    if (typeof output.insightsText === 'string' && output.insightsText.trim() === "") {
+      return { insightsText: "Ingen specifikke nye indsigter kunne udledes." };
     }
     return output;
   }

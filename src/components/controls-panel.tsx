@@ -155,8 +155,10 @@ export function ControlsPanel({
         <CardDescription>
           Start med lydoptagelse eller indtast tekst. AI&apos;en vil derefter automatisk analysere.
         </CardDescription>
-        <div className="text-sm text-muted-foreground pt-1">
-          ({sessionCyclesLength} / {maxCycles} cyklusser gennemført)
+        <div className="mt-1 inline-block">
+          <span className="text-xs font-medium bg-muted text-muted-foreground px-2 py-1 rounded-md">
+             {sessionCyclesLength} / {maxCycles} cyklusser gennemført
+          </span>
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
@@ -216,3 +218,5 @@ export function ControlsPanel({
     </Card>
   );
 }
+
+    

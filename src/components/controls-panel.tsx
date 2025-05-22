@@ -155,40 +155,40 @@ export function ControlsPanel({
         <CardDescription>
           Start med lydoptagelse eller indtast tekst. AI&apos;en vil derefter automatisk analysere.
         </CardDescription>
-        <div className="mt-1 inline-block">
-          <span className="text-xs font-medium bg-muted text-muted-foreground px-2 py-1 rounded-md">
-             {sessionCyclesLength} / {maxCycles} cyklusser gennemført
-          </span>
-        </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
         <ScrollArea className="flex-1">
           <div className="p-6 space-y-6">
             <div className="space-y-2">
               <Label htmlFor="transcription" className="text-sm font-medium">Samtale (Optag, Rediger, eller Indsæt Tekst)</Label>
-              <div className="flex flex-col sm:flex-row gap-2 mb-2">
+              <div className="flex flex-col sm:flex-row gap-2 mb-2 items-center sm:justify-between">
                 <Button 
                   onClick={handlePrimaryAction} 
                   variant={buttonVariant}
                   size="lg" 
-                  className="flex-1"
+                  className="w-full sm:w-auto sm:flex-grow-[2] order-1 sm:order-1"
                   aria-label={buttonText}
                   disabled={primaryButtonDisabled}
                 >
                   <ButtonIconComponent className={`mr-2 h-5 w-5 ${iconAnimationClass}`} />
                   {buttonText}
                 </Button>
-                <Button
-                  onClick={onResetSession}
-                  variant="outline"
-                  size="lg"
-                  className="sm:w-auto"
-                  aria-label="Nulstil Session"
-                  disabled={isAnyAIProcessRunning || isRecording}
-                >
-                  <RotateCcw className="mr-2 h-5 w-5" />
-                  Nulstil Session
-                </Button>
+                <div className="w-full sm:w-auto flex flex-row items-center gap-2 order-2 sm:order-2">
+                  <span className="text-xs font-medium bg-muted text-muted-foreground px-2 py-1 rounded-md whitespace-nowrap">
+                    {sessionCyclesLength} / {maxCycles} cyklusser
+                  </span>
+                  <Button
+                    onClick={onResetSession}
+                    variant="outline"
+                    size="lg"
+                    className="w-full sm:w-auto flex-grow sm:flex-grow-0"
+                    aria-label="Nulstil Session"
+                    disabled={isAnyAIProcessRunning || isRecording}
+                  >
+                    <RotateCcw className="mr-2 h-5 w-5" />
+                    Nulstil Session
+                  </Button>
+                </div>
               </div>
               <Textarea
                 id="transcription"

@@ -1,3 +1,4 @@
+
 "use client";
 
 import jsPDF from 'jspdf';
@@ -7,15 +8,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, MessageSquarePlus, Download, Brain, FileText, BarChartBig, FileDown } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import type { CycleData } from '@/app/page'; 
+import type { CycleData } from '@/app/page';
 import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea'; 
-import { Label } from '@/components/ui/label'; 
-
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from '@/components/ui/label';
 
 interface ResultsPanelProps {
   sessionCycles: CycleData[];
-  activeCycleData: { 
+  activeCycleData: {
     summary: string;
     identifiedThemes: string;
     newInsights: string;
@@ -25,7 +25,7 @@ interface ResultsPanelProps {
   onUseInsightsForNewCycle: (insights: string) => void;
   isAnyAIProcessRunning: boolean;
   canStartNewCycle: boolean;
-  fallbacks: { 
+  fallbacks: {
     summary: string;
     themes: string;
     insights: string;
@@ -41,6 +41,7 @@ interface ResultsPanelProps {
   userName: string;
   userEmail: string;
   userOrganization: string;
+  maxCycles: number;
 }
 
 // Helper function to add a text section to the PDF
@@ -53,13 +54,13 @@ const addTextSectionToPdf = (
   pageHeight: number,
   margin: number,
   isPreformatted = false,
-  fallbackText: string 
+  fallbackText: string
 ): number => {
   let y = currentY;
   const lineHeight = isPreformatted ? 5 : 6;
   const titleLineHeight = 7;
 
-  if (y + titleLineHeight + lineHeight > pageHeight - margin) { 
+  if (y + titleLineHeight + lineHeight > pageHeight - margin) {
     doc.addPage();
     y = margin;
   }
@@ -69,27 +70,33 @@ const addTextSectionToPdf = (
   y += titleLineHeight;
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
-  
+
   const displayContent = (content && content.trim() && !content.startsWith("Fejl") && !content.startsWith("Kunne ikke") && !content.startsWith("Ingen specifikke") && content !== fallbackText)
     ? content
     : (content && content.trim() ? content : fallbackText);
 
   const lines = doc.splitTextToSize(displayContent, pageWidth - margin * 2);
+
+  const isContentFallbackOrError = displayContent === fallbackText ||
+                              (content && (content.startsWith("Fejl") ||
+                                           content.startsWith("Kunne ikke") ||
+                                           content.startsWith("Ingen specifikke")));
+
   lines.forEach((line: string) => {
-    if (y + lineHeight > pageHeight - margin) { 
+    if (y + lineHeight > pageHeight - margin) {
       doc.addPage();
       y = margin;
     }
-    if (displayContent === fallbackText || (content && (content.startsWith("Fejl") || content.startsWith("Kunne ikke") || content.startsWith("Ingen specifikke")))){
-        doc.setTextColor(150); 
+    if (isContentFallbackOrError) {
+        doc.setTextColor(150);
     }
     doc.text(line, margin, y);
-    if (displayContent === fallbackText || (content && (content.startsWith("Fejl") || content.startsWith("Kunne ikke") || content.startsWith("Ingen specifikke")))){
-        doc.setTextColor(0); 
+    if (isContentFallbackOrError) {
+        doc.setTextColor(0);
     }
-    y += lineHeight; 
+    y += lineHeight;
   });
-  y += 5; 
+  y += 5;
   return y;
 };
 
@@ -102,14 +109,14 @@ const addImageSectionToPdf = (
   pageWidth: number,
   pageHeight: number,
   margin: number,
-  fallbackImageText: string 
+  fallbackImageText: string
 ): number => {
   let y = currentY;
   const titleLineHeight = 7;
   const spaceAfterTitle = 3;
   const spaceAfterImage = 10;
 
-  if (y + titleLineHeight + spaceAfterTitle > pageHeight - margin) { 
+  if (y + titleLineHeight + spaceAfterTitle > pageHeight - margin) {
     doc.addPage();
     y = margin;
   }
@@ -121,7 +128,7 @@ const addImageSectionToPdf = (
 
   if (imageDataUri && imageDataUri.startsWith('data:image')) {
     const imgHeightEstimate = 80; // Estimate, will be adjusted
-    if (y + imgHeightEstimate > pageHeight - margin) { 
+    if (y + imgHeightEstimate > pageHeight - margin) {
       doc.addPage();
       y = margin;
       doc.setFontSize(14);
@@ -133,10 +140,10 @@ const addImageSectionToPdf = (
     try {
       const imgProps = doc.getImageProperties(imageDataUri);
       const aspectRatio = imgProps.width / imgProps.height;
-      let imgWidth = (pageWidth - margin * 2) * 0.75; 
+      let imgWidth = (pageWidth - margin * 2) * 0.75;
       let actualImgHeight = imgWidth / aspectRatio;
-      const maxHeightForImage = pageHeight - y - margin - 5; 
-      
+      const maxHeightForImage = pageHeight - y - margin - 5;
+
       if (actualImgHeight > maxHeightForImage) {
         actualImgHeight = maxHeightForImage;
         imgWidth = actualImgHeight * aspectRatio;
@@ -146,7 +153,7 @@ const addImageSectionToPdf = (
         actualImgHeight = imgWidth / aspectRatio;
       }
 
-      const x = (pageWidth - imgWidth) / 2; 
+      const x = (pageWidth - imgWidth) / 2;
       doc.addImage(imageDataUri, imgProps.fileType, x, y, imgWidth, actualImgHeight);
       y += actualImgHeight + spaceAfterImage;
     } catch (e) {
@@ -188,12 +195,24 @@ const addUserInfoToPdf = (
 ): number => {
   let y = currentY;
   doc.setFontSize(10);
-  doc.setFont('helvetica', 'italic');
-  if (userName) addTextSectionToPdf(doc, "Navn:", userName, y, pageWidth, doc.internal.pageSize.height, margin, false, ""); else y += 7;
-  if (userEmail) addTextSectionToPdf(doc, "Email:", userEmail, y, pageWidth, doc.internal.pageSize.height, margin, false, ""); else y += 7;
-  if (userOrganization) addTextSectionToPdf(doc, "Organisation/Projekt:", userOrganization, y, pageWidth, doc.internal.pageSize.height, margin, false, ""); else y +=7;
+  doc.setFont('helvetica', 'italic'); // Italic for user info for better distinction
   
-  doc.setFont('helvetica', 'normal');
+  const addUserDetail = (label: string, value: string) => {
+    if (value && value.trim() !== "") {
+      if (y + 7 > doc.internal.pageSize.height - margin) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(`${label} ${value}`, margin, y);
+      y += 7;
+    }
+  };
+
+  addUserDetail("Navn:", userName);
+  addUserDetail("Email:", userEmail);
+  addUserDetail("Organisation/Projekt:", userOrganization);
+  
+  doc.setFont('helvetica', 'normal'); // Reset font
   y += 5; // Extra space after user info
   return y;
 };
@@ -216,6 +235,7 @@ export function ResultsPanel({
   userName,
   userEmail,
   userOrganization,
+  maxCycles,
 }: ResultsPanelProps) {
   const { toast } = useToast();
 
@@ -224,9 +244,9 @@ export function ResultsPanel({
       toast({title: "Info", description: "Ingen data at generere PDF fra.", variant: "default"});
       return;
     }
-    
-    const hasMeaningfulData = (cycle: CycleData) => 
-        (cycle.summary && cycle.summary !== fallbacks.summary && !cycle.summary.startsWith("Fejl")) || 
+
+    const hasMeaningfulData = (cycle: CycleData) =>
+        (cycle.summary && cycle.summary !== fallbacks.summary && !cycle.summary.startsWith("Fejl")) ||
         (cycle.identifiedThemes && cycle.identifiedThemes !== fallbacks.themes && !cycle.identifiedThemes.startsWith("Fejl")) ||
         (cycle.newInsights && cycle.newInsights !== fallbacks.insights && !cycle.newInsights.startsWith("Fejl")) ||
         (cycle.whiteboardContent && cycle.whiteboardContent !== fallbacks.whiteboard && !cycle.whiteboardContent.startsWith("Fejl")) ||
@@ -257,12 +277,12 @@ export function ResultsPanel({
       const now = new Date();
       doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
-      const pdfTitle = isForAllCycles 
-        ? `FraimeWorks Lite - Alle Resultater (${cyclesToPrint.length} Cyklusser)` 
+      const pdfTitle = isForAllCycles
+        ? `FraimeWorks Lite - Alle Resultater (${cyclesToPrint.length} Cyklusser)`
         : `FraimeWorks Lite - Resultater (Cyklus ${sessionCycles.findIndex(c => c.id === cyclesToPrint[0].id) + 1})`;
       doc.text(pdfTitle, pageWidth / 2, currentY, { align: 'center' });
       currentY += 10;
-      
+
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
       doc.text(`Genereret: ${now.toLocaleString('da-DK')}`, pageWidth / 2, currentY, { align: 'center' });
@@ -272,11 +292,12 @@ export function ResultsPanel({
 
 
       cyclesToPrint.forEach((cycleData, index) => {
-        if (index > 0 || currentY > margin + 20) { // Add page for subsequent cycles or if user info took space
+        if (index > 0 || currentY > margin + 20) { 
           doc.addPage();
           currentY = margin;
+           if(isForAllCycles) currentY = addUserInfoToPdf(doc, currentY, pageWidth, margin, userName, userEmail, userOrganization); // Repeat user info on new page for multi-cycle report
         }
-        
+
         if (isForAllCycles) {
             doc.setFontSize(16);
             doc.setFont('helvetica', 'bold');
@@ -287,15 +308,15 @@ export function ResultsPanel({
 
         currentY = addTextSectionToPdf(doc, "Transskription/Input:", cycleData.transcription, currentY, pageWidth, pageHeight, margin, false, fallbacks.transcription);
         currentY = addTextSectionToPdf(doc, "Resumé af Samtale:", cycleData.summary, currentY, pageWidth, pageHeight, margin, false, fallbacks.summary);
-        const themesText = (cycleData.identifiedThemes && cycleData.identifiedThemes !== fallbacks.themes && !cycleData.identifiedThemes.startsWith("Fejl") && !cycleData.identifiedThemes.startsWith("Kunne ikke") && !cycleData.identifiedThemes.startsWith("Ingen specifikke temaer")) 
-            ? cycleData.identifiedThemes.split(',').map(t => `- ${t.trim()}`).join('\n') 
+        const themesText = (cycleData.identifiedThemes && cycleData.identifiedThemes !== fallbacks.themes && !cycleData.identifiedThemes.startsWith("Fejl") && !cycleData.identifiedThemes.startsWith("Kunne ikke") && !cycleData.identifiedThemes.startsWith("Ingen specifikke temaer"))
+            ? cycleData.identifiedThemes.split(',').map(t => `- ${t.trim()}`).join('\n')
             : cycleData.identifiedThemes;
         currentY = addTextSectionToPdf(doc, "Identificerede Temaer:", themesText, currentY, pageWidth, pageHeight, margin, true, fallbacks.themes);
         currentY = addImageSectionToPdf(doc, "AI Genereret Billede:", cycleData.generatedImageDataUri, currentY, pageWidth, pageHeight, margin, fallbacks.image);
         currentY = addTextSectionToPdf(doc, "Whiteboard Indhold:", cycleData.whiteboardContent, currentY, pageWidth, pageHeight, margin, true, fallbacks.whiteboard);
         currentY = addTextSectionToPdf(doc, "Nye AI Indsigter:", cycleData.newInsights, currentY, pageWidth, pageHeight, margin, false, fallbacks.insights);
       });
-      
+
       const filename = isForAllCycles
         ? `FraimeWorksLite_Alle_Cyklusser_${now.toISOString().split('T')[0]}.pdf`
         : `FraimeWorksLite_Resultater_Cyklus_${sessionCycles.findIndex(c => c.id === cyclesToPrint[0].id) + 1}_${now.toISOString().split('T')[0]}.pdf`;
@@ -327,13 +348,13 @@ export function ResultsPanel({
 
 
   const reversedCycles = [...sessionCycles].reverse();
-  
-  const noActiveDataToShow = 
+
+  const noActiveDataToShow =
     activeCycleData.summary === fallbacks.summary &&
     activeCycleData.identifiedThemes === fallbacks.themes &&
     activeCycleData.newInsights === fallbacks.insights;
 
-  const isDisplayingActiveData = isAnyAIProcessRunning || (!noActiveDataToShow && sessionCycles.length < ResultsPanelProps.maxCycles);
+  const isDisplayingActiveData = (isAnyAIProcessRunning || !noActiveDataToShow) && sessionCycles.length < maxCycles;
 
 
   const ActiveCycleDisplay = () => (
@@ -403,99 +424,101 @@ export function ResultsPanel({
   );
 
   return (
-    <div className="flex flex-col h-full"> 
-      <Card className="shadow-lg flex-1 flex flex-col overflow-hidden"> 
+    <div className="flex flex-col h-full">
+      <Card className="shadow-lg flex-1 flex flex-col overflow-hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Brain className="h-6 w-6 text-primary" /> 
+            <Brain className="h-6 w-6 text-primary" />
             AI Analyse Resultater
           </CardTitle>
           <CardDescription>
             Her vises resultater fra dine analysecyklusser. Du kan downloade resultater som PDF eller en samlet rapport.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col overflow-hidden p-0"> 
-          <ScrollArea className="flex-1 p-6 pb-0"> 
-            <div className="space-y-0">
-              {isDisplayingActiveData && (
-                <ActiveCycleDisplay />
-              )}
+        <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
+           <div className="flex-1 flex flex-col overflow-hidden"> {/* Outer container for ScrollArea and Footer */}
+            <ScrollArea className="flex-1 p-6 pb-0">
+              <div className="space-y-0 pb-6"> {/* Added pb-6 here for bottom spacing within scroll area */}
+                {isDisplayingActiveData && (
+                  <ActiveCycleDisplay />
+                )}
 
-              {reversedCycles.map((cycle, index) => (
-                <div key={cycle.id} className="mb-6 p-4 border border-border rounded-lg shadow-sm bg-card">
-                  <h3 className="text-xl font-semibold mb-3 text-primary">Cyklus {sessionCycles.length - index}</h3>
-                  <div>
-                    <h4 className="text-lg font-semibold mb-1 text-foreground">Resumé af Samtale</h4>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
-                      {(cycle.summary && cycle.summary !== fallbacks.summary && !cycle.summary.startsWith("Fejl") && !cycle.summary.startsWith("Kunne ikke")) ? cycle.summary : <span className="italic">{cycle.summary || fallbacks.summary}</span>}
-                    </p>
+                {reversedCycles.map((cycle, index) => (
+                  <div key={cycle.id} className="mb-6 p-4 border border-border rounded-lg shadow-sm bg-card">
+                    <h3 className="text-xl font-semibold mb-3 text-primary">Cyklus {sessionCycles.length - index}</h3>
+                    <div>
+                      <h4 className="text-lg font-semibold mb-1 text-foreground">Resumé af Samtale</h4>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                        {(cycle.summary && cycle.summary !== fallbacks.summary && !cycle.summary.startsWith("Fejl") && !cycle.summary.startsWith("Kunne ikke")) ? cycle.summary : <span className="italic">{cycle.summary || fallbacks.summary}</span>}
+                      </p>
+                    </div>
+                    <Separator className="my-3" />
+                    <div>
+                      <h4 className="text-lg font-semibold mb-1 text-foreground">Identificerede Temaer</h4>
+                      {(cycle.identifiedThemes && cycle.identifiedThemes !== fallbacks.themes && !cycle.identifiedThemes.startsWith("Fejl") && !cycle.identifiedThemes.startsWith("Kunne ikke") && !cycle.identifiedThemes.startsWith("Ingen specifikke temaer")) ? (
+                        <div className="flex flex-wrap gap-2">
+                          {cycle.identifiedThemes.split(',').map((theme, idx) => (
+                            <span key={idx} className="inline-block bg-accent/80 text-accent-foreground rounded-full px-3 py-1 text-xs font-semibold shadow-sm">
+                              {theme.trim()}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">{cycle.identifiedThemes || fallbacks.themes}</p>
+                      )}
+                    </div>
+                    <Separator className="my-3" />
+                    <div>
+                      <h4 className="text-lg font-semibold mb-1 text-foreground">Nye AI Indsigter</h4>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                         {(cycle.newInsights && cycle.newInsights !== fallbacks.insights && !cycle.newInsights.startsWith("Fejl") && !cycle.newInsights.startsWith("Kunne ikke") && !cycle.newInsights.startsWith("Ingen specifikke")) ? cycle.newInsights : <span className="italic">{cycle.newInsights || fallbacks.insights}</span>}
+                      </p>
+                      {(cycle.newInsights && cycle.newInsights !== fallbacks.insights && !cycle.newInsights.startsWith("Fejl") && !cycle.newInsights.startsWith("Kunne ikke") && !cycle.newInsights.startsWith("Ingen specifikke")) && (
+                         <Button
+                            onClick={() => onUseInsightsForNewCycle(cycle.newInsights)}
+                            variant="outline"
+                            className="w-full sm:w-auto mt-2"
+                            disabled={isAnyAIProcessRunning || !canStartNewCycle || (sessionCycles.length >= maxCycles && cycle.id !== reversedCycles[0].id) }
+                            aria-label={`Brug indsigter fra cyklus ${sessionCycles.length - index} til ny samtale`}
+                          >
+                            <MessageSquarePlus className="mr-2 h-4 w-4" />
+                            Brug Indsigter fra Cyklus {sessionCycles.length - index}
+                          </Button>
+                      )}
+                    </div>
+                     {index < reversedCycles.length -1 && !(isDisplayingActiveData && index === 0 && reversedCycles.length > 1) && <Separator className="my-4 border-dashed" />}
                   </div>
-                  <Separator className="my-3" />
-                  <div>
-                    <h4 className="text-lg font-semibold mb-1 text-foreground">Identificerede Temaer</h4>
-                    {(cycle.identifiedThemes && cycle.identifiedThemes !== fallbacks.themes && !cycle.identifiedThemes.startsWith("Fejl") && !cycle.identifiedThemes.startsWith("Kunne ikke") && !cycle.identifiedThemes.startsWith("Ingen specifikke temaer")) ? (
-                      <div className="flex flex-wrap gap-2">
-                        {cycle.identifiedThemes.split(',').map((theme, idx) => (
-                          <span key={idx} className="inline-block bg-accent/80 text-accent-foreground rounded-full px-3 py-1 text-xs font-semibold shadow-sm">
-                            {theme.trim()}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground italic">{cycle.identifiedThemes || fallbacks.themes}</p>
-                    )}
-                  </div>
-                  <Separator className="my-3" />
-                  <div>
-                    <h4 className="text-lg font-semibold mb-1 text-foreground">Nye AI Indsigter</h4>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
-                       {(cycle.newInsights && cycle.newInsights !== fallbacks.insights && !cycle.newInsights.startsWith("Fejl") && !cycle.newInsights.startsWith("Kunne ikke") && !cycle.newInsights.startsWith("Ingen specifikke")) ? cycle.newInsights : <span className="italic">{cycle.newInsights || fallbacks.insights}</span>}
-                    </p>
-                    {(cycle.newInsights && cycle.newInsights !== fallbacks.insights && !cycle.newInsights.startsWith("Fejl") && !cycle.newInsights.startsWith("Kunne ikke") && !cycle.newInsights.startsWith("Ingen specifikke")) && (
-                       <Button
-                          onClick={() => onUseInsightsForNewCycle(cycle.newInsights)}
-                          variant="outline"
-                          className="w-full sm:w-auto mt-2"
-                          disabled={isAnyAIProcessRunning || !canStartNewCycle || (sessionCycles.length >= ResultsPanelProps.maxCycles && cycle.id !== reversedCycles[0].id) }
-                          aria-label={`Brug indsigter fra cyklus ${sessionCycles.length - index} til ny samtale`}
-                        >
-                          <MessageSquarePlus className="mr-2 h-4 w-4" />
-                          Brug Indsigter fra Cyklus {sessionCycles.length - index}
-                        </Button>
-                    )}
-                  </div>
-                   {index < reversedCycles.length -1 && !(isDisplayingActiveData && index === 0 && reversedCycles.length > 1) && <Separator className="my-4 border-dashed" />}
-                </div>
-              ))}
-              
-              {sessionCycles.length === 0 && !isDisplayingActiveData && (
-                  <p className="text-sm text-muted-foreground text-center py-10">Ingen analysecyklusser er kørt endnu. Start en analyse i kontrolpanelet.</p>
-              )}
-            </div>
-          </ScrollArea>
-          
-          <CardFooter className="p-6 pt-4 border-t border-border flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4 justify-start">
-            <Button 
-              variant="default" 
-              className="flex-1 sm:flex-none min-w-[200px]"
-              onClick={handleGenerateLatestCyclePdf}
-              disabled={sessionCycles.length === 0 || isAnyAIProcessRunning || isGeneratingReport} 
-              aria-label="Download resultater fra seneste afsluttede cyklus som PDF"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Download Seneste Cyklus (PDF)
-            </Button>
-            <Button 
-              variant="outline" 
-              className="flex-1 sm:flex-none min-w-[200px]"
-              onClick={handleGenerateAllCyclesPdf}
-              disabled={sessionCycles.length === 0 || isAnyAIProcessRunning || isGeneratingReport} 
-              aria-label="Download resultater fra alle afsluttede cyklusser som PDF"
-            >
-              <FileText className="mr-2 h-4 w-4" />
-              Download Alle Cyklusser (PDF)
-            </Button>
-          </CardFooter>
+                ))}
+
+                {sessionCycles.length === 0 && !isDisplayingActiveData && (
+                    <p className="text-sm text-muted-foreground text-center py-10">Ingen analysecyklusser er kørt endnu. Start en analyse i kontrolpanelet.</p>
+                )}
+              </div>
+            </ScrollArea>
+
+            <CardFooter className="p-6 pt-4 border-t border-border flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4 justify-start">
+              <Button
+                variant="default"
+                className="flex-1 sm:flex-none min-w-[200px]"
+                onClick={handleGenerateLatestCyclePdf}
+                disabled={sessionCycles.length === 0 || isAnyAIProcessRunning || isGeneratingReport}
+                aria-label="Download resultater fra seneste afsluttede cyklus som PDF"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download Seneste Cyklus (PDF)
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 sm:flex-none min-w-[200px]"
+                onClick={handleGenerateAllCyclesPdf}
+                disabled={sessionCycles.length === 0 || isAnyAIProcessRunning || isGeneratingReport}
+                aria-label="Download resultater fra alle afsluttede cyklusser som PDF"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Download Alle Cyklusser (PDF)
+              </Button>
+            </CardFooter>
+          </div>
         </CardContent>
       </Card>
 
@@ -571,9 +594,4 @@ export function ResultsPanel({
   );
 }
 
-// Add maxCycles to ResultsPanelProps for disabling "Use Insights" button logic
-declare global {
-    interface ResultsPanelProps {
-        maxCycles: number;
-    }
-}
+    

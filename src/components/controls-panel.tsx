@@ -173,8 +173,8 @@ export function ControlsPanel({
                   <ButtonIconComponent className={`mr-2 h-5 w-5 ${iconAnimationClass}`} />
                   {buttonText}
                 </Button>
-                <div className="w-full sm:w-auto flex flex-row items-center gap-2 order-2 sm:order-2">
-                  <span className="text-xs font-medium bg-muted text-muted-foreground px-2 py-1 rounded-md whitespace-nowrap">
+                <div className="w-full sm:w-auto flex flex-row items-center gap-2 order-2 sm:order-2 sm:ml-auto">
+                  <span className="text-sm font-medium bg-muted text-muted-foreground px-3 py-2 h-11 flex items-center justify-center rounded-md whitespace-nowrap">
                     {sessionCyclesLength} / {maxCycles} cyklusser
                   </span>
                   <Button
@@ -218,5 +218,3 @@ export function ControlsPanel({
     </Card>
   );
 }
-
-    

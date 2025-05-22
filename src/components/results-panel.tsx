@@ -30,8 +30,8 @@ interface ResultsPanelProps {
     themes: string;
     insights: string;
     whiteboard: string;
-    image: string;
-    transcription: string;
+    image: string;           
+    transcription: string; 
   };
   sessionReport: string;
   isGeneratingReport: boolean;
@@ -56,8 +56,8 @@ const addTextSectionToPdf = (
   fallbackText: string
 ): number => {
   let y = currentY;
-  const lineHeight = isPreformatted ? 5 : 7; // Increased line height
-  const titleLineHeight = 8; // Increased title line height
+  const lineHeight = isPreformatted ? 5 : 7; 
+  const titleLineHeight = 8; 
 
   if (y + titleLineHeight + lineHeight > pageHeight - margin) {
     doc.addPage();
@@ -95,7 +95,7 @@ const addTextSectionToPdf = (
     }
     y += lineHeight;
   });
-  y += 5; // Space after section
+  y += 5; 
   return y;
 };
 
@@ -126,13 +126,13 @@ const addImageSectionToPdf = (
   doc.setFont('helvetica', 'normal');
 
   if (imageDataUri && imageDataUri.startsWith('data:image')) {
-    const imgHeightEstimate = 80; // Estimate, will be adjusted
+    const imgHeightEstimate = 80; 
     if (y + imgHeightEstimate > pageHeight - margin) {
       doc.addPage();
       y = margin;
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
-      doc.text(title, margin, y); // Repeat title on new page
+      doc.text(title, margin, y); 
       y += titleLineHeight + spaceAfterTitle;
       doc.setFont('helvetica', 'normal');
     }
@@ -169,7 +169,7 @@ const addImageSectionToPdf = (
         y = margin;
         doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
-        doc.text(title, margin, y); // Repeat title on new page
+        doc.text(title, margin, y); 
         y += titleLineHeight + spaceAfterTitle;
         doc.setFont('helvetica', 'normal');
       }
@@ -293,7 +293,7 @@ export function ResultsPanel({
         if (index > 0 || currentY > margin + 20) { 
           doc.addPage();
           currentY = margin;
-           if(isForAllCycles) currentY = addUserInfoToPdf(doc, currentY, pageWidth, margin, userName, userEmail, userOrganization); // Repeat user info on new page for multi-cycle report
+           if(isForAllCycles) currentY = addUserInfoToPdf(doc, currentY, pageWidth, margin, userName, userEmail, userOrganization); 
         }
 
         if (isForAllCycles) {
@@ -434,9 +434,9 @@ export function ResultsPanel({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
-           <div className="flex-1 flex flex-col overflow-hidden"> {/* Outer container for ScrollArea and Footer */}
+           <div className="flex-1 flex flex-col overflow-hidden">
             <ScrollArea className="flex-1 p-6 pb-0">
-              <div className="space-y-0 pb-6"> {/* Added pb-6 here for bottom spacing within scroll area */}
+              <div className="space-y-0 pb-6"> 
                 {isDisplayingActiveData && (
                   <ActiveCycleDisplay />
                 )}
@@ -546,7 +546,7 @@ export function ResultsPanel({
             </Button>
              <Button
               onClick={onDownloadSessionReportAsPdf}
-              disabled={isGeneratingReport || !sessionReport || sessionReport.startsWith("Fejl") || sessionReport.startsWith("Kunne ikke") || sessionReport.startsWith("Ingen cyklusdata")}
+              disabled={isGeneratingReport || !sessionReport || sessionReport.startsWith("Fejl") || sessionReport.startsWith("Kunne ikke") || sessionReport.startsWith("Ingen cyklusdata") || sessionReport.startsWith("Genererer")}
               variant="outline"
               className="w-full sm:w-auto"
             >
@@ -582,7 +582,5 @@ export function ResultsPanel({
     </div>
   );
 }
-
-    
 
     

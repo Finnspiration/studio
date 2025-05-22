@@ -429,24 +429,6 @@ export default function SynapseScribblePage() {
     }
   };
 
-  const handleDownloadSessionReportAsMarkdown = () => {
-    if (!sessionReport || sessionReport.trim() === "" || sessionReport.startsWith("Genererer") || sessionReport.startsWith("Fejl") || sessionReport.startsWith("Kunne ikke")) {
-      toast({ title: "Ingen rapport", description: "Der er ingen rapport at downloade.", variant: "default" });
-      return;
-    }
-    const blob = new Blob([sessionReport], { type: 'text/markdown;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    const timestamp = new Date().toISOString().split('T')[0];
-    link.setAttribute('download', `FraimeWorksLite_SessionRapport_${timestamp}.md`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast({ title: "Download Startet", description: "Sessionsrapport downloades som Markdown-fil." });
-  };
-
   const handleDownloadSessionReportAsPdf = () => {
     if (!sessionReport || sessionReport.trim() === "" || sessionReport.startsWith("Genererer") || sessionReport.startsWith("Fejl") || sessionReport.startsWith("Kunne ikke")) {
       toast({ title: "Ingen rapport", description: "Der er ingen rapport at downloade som PDF.", variant: "default" });
@@ -464,10 +446,10 @@ export default function SynapseScribblePage() {
       const pageWidth = doc.internal.pageSize.width;
       const margin = 15;
       let currentY = margin;
-      const lineHeight = 6; // Approximate line height in mm
+      const lineHeight = 6; // Approximate line height in mm for 10pt font
 
       // Helper to add text and handle page breaks
-      const addText = (text: string, size: number, style: string | string[] = 'normal', indent = 0) => {
+      const addTextToPdf = (text: string, size: number, style: string | string[] = 'normal', indent = 0) => {
         doc.setFontSize(size);
         doc.setFont('helvetica', style); // Use a standard font
         const lines = doc.splitTextToSize(text, pageWidth - margin * 2 - indent);
@@ -485,25 +467,27 @@ export default function SynapseScribblePage() {
 
       reportLines.forEach(line => {
         if (line.startsWith('# Rapporttitel:')) { // H1 for main title
-            addText(line.substring(2), 18, 'bold');
+            addTextToPdf(line.substring(2), 18, 'bold');
             currentY += lineHeight / 2; // Extra space after main title
         } else if (line.startsWith('## ')) { // H2
           currentY += lineHeight / 2; // Space before H2
-          addText(line.substring(3), 14, 'bold');
+          addTextToPdf(line.substring(3), 14, 'bold');
           currentY += lineHeight / 4;
         } else if (line.startsWith('### ')) { // H3
           currentY += lineHeight / 4; // Space before H3
-          addText(line.substring(4), 12, 'bold');
+          addTextToPdf(line.substring(4), 12, 'bold');
         } else if (line.startsWith('*   ')) { // List item
-          addText(`• ${line.substring(4)}`, 10, 'normal', 5); // Indent list items
+          addTextToPdf(`• ${line.substring(4)}`, 10, 'normal', 5); // Indent list items
         } else if (line.startsWith('-   ')) { // Alternative list item
-          addText(`• ${line.substring(4)}`, 10, 'normal', 5);
+          addTextToPdf(`• ${line.substring(4)}`, 10, 'normal', 5);
         } else if (line.startsWith('---')) { // Separator
            if (currentY + 5 > pageHeight - margin) { doc.addPage(); currentY = margin; }
            doc.line(margin, currentY, pageWidth - margin, currentY);
            currentY += 5;
+        } else if (line.trim() === "") { // Empty line for spacing
+            currentY += lineHeight / 2;
         } else {
-          addText(line, 10);
+          addTextToPdf(line, 10);
         }
       });
       
@@ -609,7 +593,6 @@ export default function SynapseScribblePage() {
             sessionReport={sessionReport}
             isGeneratingReport={isGeneratingReport}
             onGenerateSessionReport={handleGenerateSessionReport}
-            onDownloadSessionReportAsMarkdown={handleDownloadSessionReportAsMarkdown}
             onDownloadSessionReportAsPdf={handleDownloadSessionReportAsPdf}
             userName={userName}
             userEmail={userEmail}
@@ -621,5 +604,7 @@ export default function SynapseScribblePage() {
     </div>
   );
 }
+
+    
 
     

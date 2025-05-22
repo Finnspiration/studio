@@ -92,7 +92,6 @@ Version/Dato: (Indsæt dags dato automatisk)
 5. Visuelle fund
 6. Strategiske implikationer
 7. Anbefalinger &amp; næste handlinger
-8. Appendiks
 
 ## 1. Executive Summary
 *   Formål med analysen: (Opsummer formålet baseret på den overordnede kontekst af cyklusserne - typisk idéudvikling og indsigtgenerering fra samtaler)
@@ -147,13 +146,6 @@ Analyserne og genereringen er foretaget ved hjælp af Gemini-modeller via Genkit
     *   Quick Wins: (Forslag 1-2)
     *   Long-Term: (Forslag 1-2)
 *   KPI-forslag eller eksperiment­design til validering: (Forslag 1-2)
-
-## 8. Appendiks
-(Dette er en liste over, hvad et fuldt appendiks typisk ville indeholde. Den faktiske data er ikke inkluderet her.)
-*   Fuld transskription af alle cyklusser
-*   Whiteboard-skitser i høj opløsning (hvis relevant for applikationen)
-*   Fuld-size AI-genererede billeder (som data URI'er eller referencer)
-*   Tekniske parametre (prompt-historik, modelversioner) - (Bemærk: Ikke detaljeret sporet i denne applikation)
 
 ---
 Generer rapporten baseret på de {{sessionCycles.length}} cyklusser.
@@ -233,3 +225,5 @@ const generateSessionReportFlow = ai.defineFlow(
     }
   }
 );
+
+    

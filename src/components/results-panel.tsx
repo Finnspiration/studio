@@ -36,7 +36,6 @@ interface ResultsPanelProps {
   sessionReport: string;
   isGeneratingReport: boolean;
   onGenerateSessionReport: () => Promise<void>;
-  onDownloadSessionReportAsMarkdown: () => void;
   onDownloadSessionReportAsPdf: () => void;
   userName: string;
   userEmail: string;
@@ -57,8 +56,8 @@ const addTextSectionToPdf = (
   fallbackText: string
 ): number => {
   let y = currentY;
-  const lineHeight = isPreformatted ? 5 : 6;
-  const titleLineHeight = 7;
+  const lineHeight = isPreformatted ? 5 : 7; // Increased line height
+  const titleLineHeight = 8; // Increased title line height
 
   if (y + titleLineHeight + lineHeight > pageHeight - margin) {
     doc.addPage();
@@ -96,7 +95,7 @@ const addTextSectionToPdf = (
     }
     y += lineHeight;
   });
-  y += 5;
+  y += 5; // Space after section
   return y;
 };
 
@@ -112,7 +111,7 @@ const addImageSectionToPdf = (
   fallbackImageText: string
 ): number => {
   let y = currentY;
-  const titleLineHeight = 7;
+  const titleLineHeight = 8;
   const spaceAfterTitle = 3;
   const spaceAfterImage = 10;
 
@@ -195,7 +194,7 @@ const addUserInfoToPdf = (
 ): number => {
   let y = currentY;
   doc.setFontSize(10);
-  doc.setFont('helvetica', 'italic'); // Italic for user info for better distinction
+  doc.setFont('helvetica', 'italic'); 
   
   const addUserDetail = (label: string, value: string) => {
     if (value && value.trim() !== "") {
@@ -212,8 +211,8 @@ const addUserInfoToPdf = (
   addUserDetail("Email:", userEmail);
   addUserDetail("Organisation/Projekt:", userOrganization);
   
-  doc.setFont('helvetica', 'normal'); // Reset font
-  y += 5; // Extra space after user info
+  doc.setFont('helvetica', 'normal'); 
+  y += 5; 
   return y;
 };
 
@@ -230,7 +229,6 @@ export function ResultsPanel({
   sessionReport,
   isGeneratingReport,
   onGenerateSessionReport,
-  onDownloadSessionReportAsMarkdown,
   onDownloadSessionReportAsPdf,
   userName,
   userEmail,
@@ -546,15 +544,6 @@ export function ResultsPanel({
               )}
               {isGeneratingReport ? "Genererer Rapport..." : "Generer Session Rapport (AI)"}
             </Button>
-            <Button
-              onClick={onDownloadSessionReportAsMarkdown}
-              disabled={isGeneratingReport || !sessionReport || sessionReport.startsWith("Fejl") || sessionReport.startsWith("Kunne ikke") || sessionReport.startsWith("Ingen cyklusdata")}
-              variant="outline"
-              className="w-full sm:w-auto"
-            >
-              <FileDown className="mr-2 h-4 w-4" />
-              Download Rapport (MD)
-            </Button>
              <Button
               onClick={onDownloadSessionReportAsPdf}
               disabled={isGeneratingReport || !sessionReport || sessionReport.startsWith("Fejl") || sessionReport.startsWith("Kunne ikke") || sessionReport.startsWith("Ingen cyklusdata")}
@@ -569,7 +558,7 @@ export function ResultsPanel({
           {(sessionReport || isGeneratingReport) && (
             <div className="flex-1 p-6 pt-0 flex flex-col overflow-hidden">
               <Label htmlFor="sessionReportArea" className="mb-2 text-sm font-medium">
-                {isGeneratingReport && !sessionReport.startsWith("Genererer") ? "Genererer rapport..." : "Genereret Rapport (Markdown)"}
+                {isGeneratingReport && !sessionReport.startsWith("Genererer") ? "Genererer rapport..." : "Genereret Rapport"}
               </Label>
               <ScrollArea className="flex-1 border border-input rounded-md p-2 bg-muted/50">
                 {isGeneratingReport && sessionReport.startsWith("Genererer") ? (
@@ -593,5 +582,7 @@ export function ResultsPanel({
     </div>
   );
 }
+
+    
 
     

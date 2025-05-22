@@ -13,7 +13,6 @@ interface WhiteboardPanelProps {
   whiteboardContent: string;
   setWhiteboardContent: Dispatch<SetStateAction<string>>;
   generatedImageDataUri: string;
-  isGeneratingImage: boolean;
   currentLoadingState: string | null;
   fallbackEmptyWhiteboard: string;
   fallbackEmptyImage: string;
@@ -23,15 +22,13 @@ export function WhiteboardPanel({
   whiteboardContent,
   setWhiteboardContent,
   generatedImageDataUri,
-  isGeneratingImage,
   currentLoadingState,
   fallbackEmptyWhiteboard,
   fallbackEmptyImage,
 }: WhiteboardPanelProps) {
   const isGeneratingActiveWhiteboard = !!currentLoadingState && currentLoadingState.includes("Genererer whiteboard-idéer");
   const isGeneratingActiveImage = !!currentLoadingState && currentLoadingState.includes("Genererer billede");
-  const isLoadingAnyMedia = isGeneratingImage || isGeneratingActiveWhiteboard;
-
+  
   return (
     <Card className="flex-1 flex flex-col shadow-lg">
       <CardHeader className="px-4 pt-5 pb-4">
@@ -39,7 +36,7 @@ export function WhiteboardPanel({
           <Palette className="h-6 w-6 text-primary" />
           Whiteboard
         </CardTitle>
-        {currentLoadingState && !currentLoadingState.includes("Optager") && (isGeneratingActiveWhiteboard || isGeneratingActiveImage) && (
+        {currentLoadingState && (isGeneratingActiveWhiteboard || isGeneratingActiveImage) && (
           <CardDescription className="flex items-center text-sm pt-1 text-primary">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             {currentLoadingState}
@@ -67,14 +64,14 @@ export function WhiteboardPanel({
                     : whiteboardContent
                 }
                 value={
-                  whiteboardContent === fallbackEmptyWhiteboard && !isGeneratingActiveWhiteboard
+                  (whiteboardContent === fallbackEmptyWhiteboard || whiteboardContent.startsWith("Genererer whiteboard-idéer...")) && !isGeneratingActiveWhiteboard
                     ? ""
                     : whiteboardContent
                 }
                 onChange={(e) => setWhiteboardContent(e.target.value)}
                 className="flex-1 resize-none text-base bg-card min-h-[120px]"
                 aria-label="Whiteboard indholdsområde"
-                disabled={isLoadingAnyMedia}
+                disabled={isGeneratingActiveWhiteboard || isGeneratingActiveImage}
               />
             )}
           </div>
@@ -82,12 +79,12 @@ export function WhiteboardPanel({
           <div className="flex-shrink-0">
             <Label className="mb-2 text-sm font-medium">AI Genereret Billede</Label>
             <div className="w-full aspect-video bg-muted rounded-md flex items-center justify-center overflow-hidden border border-border relative">
-              {isGeneratingImage && (generatedImageDataUri === fallbackEmptyImage || generatedImageDataUri.startsWith("Genererer billede...")) ? (
+              {isGeneratingActiveImage ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80">
                   <Loader2 className="h-10 w-10 text-primary animate-spin mb-2" />
                   <p className="text-sm text-foreground">Genererer billede...</p>
                 </div>
-              ) : generatedImageDataUri && generatedImageDataUri !== fallbackEmptyImage && !generatedImageDataUri.startsWith("Fejl") && !generatedImageDataUri.startsWith("Ugyldig prompt") && !generatedImageDataUri.startsWith("Billedgenerering fejlede") && !generatedImageDataUri.startsWith("Billedgenerering sprunget over") ? (
+              ) : generatedImageDataUri && generatedImageDataUri.startsWith('data:image') ? (
                 <Image
                   src={generatedImageDataUri}
                   alt="AI genereret billede"
@@ -100,11 +97,10 @@ export function WhiteboardPanel({
                 <div className="flex flex-col items-center text-center text-muted-foreground p-4">
                   <ImageOff className="h-12 w-12 mb-2 opacity-70" />
                   <p className="text-sm">
-                    {generatedImageDataUri === fallbackEmptyImage && isGeneratingActiveImage ? "Genererer billede..." :
-                     generatedImageDataUri === fallbackEmptyImage ? "Intet billede genereret endnu." :
+                    {generatedImageDataUri === fallbackEmptyImage ? "Intet billede genereret endnu." :
                      generatedImageDataUri}
                   </p>
-                  {(generatedImageDataUri === fallbackEmptyImage && !isGeneratingActiveImage) && <p className="text-xs mt-1">(Billede genereres automatisk baseret på samtalen)</p>}
+                  {(generatedImageDataUri === fallbackEmptyImage) && <p className="text-xs mt-1">(Billede genereres automatisk baseret på samtalen)</p>}
                 </div>
               )}
             </div>
@@ -114,5 +110,3 @@ export function WhiteboardPanel({
     </Card>
   );
 }
-
-    

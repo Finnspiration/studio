@@ -1,3 +1,4 @@
+
 // src/ai/flows/generate-image-flow.ts
 'use server';
 /**
@@ -38,15 +39,15 @@ const generateImageFlow = ai.defineFlow(
   },
   async (input) => {
     if (!input.prompt || input.prompt.trim() === '' || input.prompt.startsWith("Fejl") || input.prompt.startsWith("Kunne ikke") || input.prompt.startsWith("Ingen specifikke")) {
-      console.warn("GenerateImageFlow: Ugyldig prompt for billedgenerering.");
-      return { imageDataUri: "Ugyldig prompt for billedgenerering." };
+      console.warn(`GenerateImageFlow: Ugyldig KERNEL prompt for billedgenerering: "${input.prompt}". Stil prompt var: "${input.style}"`);
+      return { imageDataUri: "Ugyldig KERNEL prompt for billedgenerering. Kan ikke generere billede." };
     }
-    const styledPrompt = input.style ? `${input.prompt}, in a ${input.style} style` : input.prompt;
+    const finalPrompt = input.style ? `${input.prompt}, in a ${input.style} style` : input.prompt;
 
     try {
       const { media } = await ai.generate({
         model: 'googleai/gemini-2.0-flash-exp', 
-        prompt: styledPrompt, 
+        prompt: finalPrompt, 
         config: {
           responseModalities: ['TEXT', 'IMAGE'], 
         },
@@ -75,3 +76,5 @@ const generateImageFlow = ai.defineFlow(
     }
   }
 );
+
+  

@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, MessageSquarePlus, Download, Brain } from 'lucide-react';
+import { Loader2, MessageSquarePlus, Download, Brain, FileText } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import type { CycleData } from '@/app/page'; 
@@ -30,6 +30,132 @@ interface ResultsPanelProps {
   };
 }
 
+// Helper function to add a text section to the PDF
+const addTextSectionToPdf = (
+  doc: jsPDF,
+  title: string,
+  content: string | null | undefined,
+  currentY: number,
+  pageWidth: number,
+  pageHeight: number,
+  margin: number,
+  isPreformatted = false,
+  fallbacks: { summary: string, themes: string, insights: string }
+): number => {
+  let y = currentY;
+  if (y + 10 > pageHeight - margin) { 
+    doc.addPage();
+    y = margin;
+  }
+  doc.setFontSize(14);
+  doc.text(title, margin, y);
+  y += 7;
+  doc.setFontSize(11);
+  
+  const fallbackContent = title.includes("Resumé") ? fallbacks.summary : 
+                         title.includes("Temaer") ? fallbacks.themes :
+                         title.includes("Indsigter") ? fallbacks.insights :
+                         "Intet indhold genereret eller tilgængeligt.";
+
+  if (content && content.trim() && !content.startsWith("Fejl") && !content.startsWith("Kunne ikke") && !content.startsWith("Ingen specifikke") && content !== fallbackContent) {
+    const lines = doc.splitTextToSize(content, pageWidth - margin * 2);
+    lines.forEach((line: string) => {
+      if (y + (isPreformatted ? 5 : 6) > pageHeight - margin) { 
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(line, margin, y);
+      y += (isPreformatted ? 5 : 6); 
+    });
+  } else {
+    if (y + 6 > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+    }
+    doc.setTextColor(150);
+    doc.text(content && content.trim() ? content : fallbackContent, margin, y);
+    doc.setTextColor(0);
+    y += 6;
+  }
+  y += 5; 
+  return y;
+};
+
+// Helper function to add an image section to the PDF
+const addImageSectionToPdf = (
+  doc: jsPDF,
+  title: string,
+  imageDataUri: string | null | undefined,
+  currentY: number,
+  pageWidth: number,
+  pageHeight: number,
+  margin: number,
+  fallbackImageText: string
+): number => {
+  let y = currentY;
+  if (y + 10 > pageHeight - margin) { 
+    doc.addPage();
+    y = margin;
+  }
+  doc.setFontSize(14);
+  doc.text(title, margin, y);
+  y += 7;
+
+  if (imageDataUri && imageDataUri.startsWith('data:image')) {
+    if (y + 80 > pageHeight - margin) { // Approximate height for image section
+      doc.addPage();
+      y = margin;
+      // Re-add title on new page if needed
+      doc.setFontSize(14);
+      doc.text(title, margin, y);
+      y += 7;
+    }
+    try {
+      const imgProps = doc.getImageProperties(imageDataUri);
+      const aspectRatio = imgProps.width / imgProps.height;
+      let imgWidth = (pageWidth - margin * 2) * 0.75; 
+      let imgHeight = imgWidth / aspectRatio;
+      const maxHeight = pageHeight - y - margin - 5; 
+      
+      if (imgHeight > maxHeight) {
+        imgHeight = maxHeight;
+        imgWidth = imgHeight * aspectRatio;
+      }
+      if (imgWidth > (pageWidth - margin * 2)) {
+        imgWidth = (pageWidth - margin * 2);
+        imgHeight = imgWidth / aspectRatio;
+      }
+
+      const x = (pageWidth - imgWidth) / 2; 
+      doc.addImage(imageDataUri, imgProps.fileType, x, y, imgWidth, imgHeight);
+      y += imgHeight + 10;
+    } catch (e) {
+      console.error("Fejl ved tilføjelse af billede til PDF:", e);
+      if (y + 10 > pageHeight - margin) { doc.addPage(); y = margin; }
+      doc.setTextColor(150);
+      doc.text("Fejl: Kunne ikke indlæse billede i PDF.", margin, y);
+      doc.setTextColor(0);
+      y += 10;
+    }
+  } else {
+     if (y + 10 > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+        // Re-add title on new page if needed
+        doc.setFontSize(14);
+        doc.text(title, margin, y);
+        y += 7;
+      }
+    doc.setFontSize(11);
+    doc.setTextColor(150);
+    doc.text(imageDataUri && (imageDataUri.includes("Fejl") || imageDataUri.includes("Ugyldig prompt") || imageDataUri === fallbackImageText) ? imageDataUri : fallbackImageText, margin, y);
+    doc.setTextColor(0);
+    y += 10;
+  }
+  return y;
+};
+
+
 export function ResultsPanel({
   sessionCycles,
   activeCycleData,
@@ -42,21 +168,32 @@ export function ResultsPanel({
 }: ResultsPanelProps) {
   const { toast } = useToast();
 
-  const handleGeneratePdf = () => {
-    const latestCompletedCycle = sessionCycles.length > 0 ? sessionCycles[sessionCycles.length - 1] : null;
+  const generatePdfForCycles = (cyclesToPrint: CycleData[], isForAllCycles: boolean) => {
+    if (cyclesToPrint.length === 0) {
+      toast({title: "Info", description: "Ingen data at generere PDF fra.", variant: "default"});
+      return;
+    }
     
-    if (!latestCompletedCycle || 
-        (latestCompletedCycle.summary === fallbacks.summary && 
-         latestCompletedCycle.identifiedThemes === fallbacks.themes &&
-         latestCompletedCycle.newInsights === fallbacks.insights &&
-         latestCompletedCycle.whiteboardContent === fallbacks.themes && // Adjusted for actual fallback
-         latestCompletedCycle.generatedImageDataUri === fallbacks.themes) // Adjusted for actual fallback
+    if (isForAllCycles && cyclesToPrint.every(c => 
+        c.summary === fallbacks.summary && 
+        c.identifiedThemes === fallbacks.themes &&
+        c.newInsights === fallbacks.insights &&
+        c.whiteboardContent === fallbacks.themes && 
+        c.generatedImageDataUri === fallbacks.themes 
+    )) {
+        toast({title: "Info", description: "Ingen meningsfulde data i nogen cyklus at generere PDF fra.", variant: "default"});
+        return;
+    }
+     if (!isForAllCycles && cyclesToPrint.length === 1 &&
+        cyclesToPrint[0].summary === fallbacks.summary && 
+        cyclesToPrint[0].identifiedThemes === fallbacks.themes &&
+        cyclesToPrint[0].newInsights === fallbacks.insights &&
+        cyclesToPrint[0].whiteboardContent === fallbacks.themes &&
+        cyclesToPrint[0].generatedImageDataUri === fallbacks.themes
        ) {
         toast({title: "Info", description: "Ingen meningsfulde data i seneste afsluttede cyklus at generere PDF fra.", variant: "default"});
         return;
     }
-    
-    const dataToUse = latestCompletedCycle;
 
     try {
       const doc = new jsPDF({
@@ -68,123 +205,81 @@ export function ResultsPanel({
       const pageHeight = doc.internal.pageSize.height;
       const pageWidth = doc.internal.pageSize.width;
       const margin = 15;
-      const maxLineWidth = pageWidth - margin * 2;
       let currentY = margin;
 
+      const now = new Date();
       doc.setFontSize(18);
-      doc.text(`FraimeWorks Lite - Resultater (Cyklus ${sessionCycles.indexOf(dataToUse) + 1})`, pageWidth / 2, currentY, { align: 'center' });
+      const pdfTitle = isForAllCycles 
+        ? `FraimeWorks Lite - Alle Resultater (${cyclesToPrint.length} Cyklusser)` 
+        : `FraimeWorks Lite - Resultater (Cyklus ${sessionCycles.indexOf(cyclesToPrint[0]) + 1})`;
+      doc.text(pdfTitle, pageWidth / 2, currentY, { align: 'center' });
       currentY += 10;
       
-      const now = new Date();
       doc.setFontSize(10);
       doc.text(`Genereret: ${now.toLocaleString('da-DK')}`, pageWidth / 2, currentY, { align: 'center' });
-      currentY += 15;
+      currentY += 10;
 
-      const addSection = (title: string, content: string | null | undefined, isPreformatted = false) => {
-        if (currentY + 10 > pageHeight - margin) { 
+      cyclesToPrint.forEach((cycleData, index) => {
+        if (index > 0) { // Add page break before new cycle, except for the first one
           doc.addPage();
           currentY = margin;
         }
-        doc.setFontSize(14);
-        doc.text(title, margin, currentY);
-        currentY += 7;
-        doc.setFontSize(11);
-        if (content && content.trim() && !content.startsWith("Fejl") && !content.startsWith("Kunne ikke") && !content.startsWith("Ingen specifikke") && content !== fallbacks.summary && content !== fallbacks.themes && content !== fallbacks.insights && content !== fallbacks.themes) {
-          const lines = doc.splitTextToSize(content, maxLineWidth);
-          lines.forEach((line: string) => {
-            if (currentY > pageHeight - margin - (isPreformatted ? 3 : 6)) { 
-              doc.addPage();
-              currentY = margin;
-            }
-            doc.text(line, margin, currentY);
-            currentY += (isPreformatted ? 5 : 6); 
-          });
-        } else {
-          doc.setTextColor(150);
-          doc.text(content && content.trim() ? content : "Intet indhold genereret eller tilgængeligt.", margin, currentY);
-          doc.setTextColor(0);
-          currentY += 6;
+        
+        if (isForAllCycles) {
+            doc.setFontSize(16);
+            doc.text(`Cyklus ${sessionCycles.indexOf(cycleData) + 1}`, margin, currentY);
+            currentY += 10;
         }
-        currentY += 5; 
-      };
+
+        currentY = addTextSectionToPdf(doc, "Transskription", cycleData.transcription, currentY, pageWidth, pageHeight, margin, false, fallbacks);
+        currentY = addTextSectionToPdf(doc, "Resumé af Samtale", cycleData.summary, currentY, pageWidth, pageHeight, margin, false, fallbacks);
+        const themesText = (cycleData.identifiedThemes && cycleData.identifiedThemes !== fallbacks.themes && !cycleData.identifiedThemes.startsWith("Fejl") && !cycleData.identifiedThemes.startsWith("Kunne ikke") && !cycleData.identifiedThemes.startsWith("Ingen specifikke temaer")) 
+            ? cycleData.identifiedThemes.split(',').map(t => `- ${t.trim()}`).join('\n') 
+            : cycleData.identifiedThemes;
+        currentY = addTextSectionToPdf(doc, "Identificerede Temaer", themesText, currentY, pageWidth, pageHeight, margin, true, fallbacks);
+        currentY = addTextSectionToPdf(doc, "Whiteboard Indhold", cycleData.whiteboardContent, currentY, pageWidth, pageHeight, margin, true, fallbacks);
+        currentY = addImageSectionToPdf(doc, "AI Genereret Billede", cycleData.generatedImageDataUri, currentY, pageWidth, pageHeight, margin, fallbacks.themes); // Using themes fallback as a generic "not available" text
+        currentY = addTextSectionToPdf(doc, "Nye AI Indsigter", cycleData.newInsights, currentY, pageWidth, pageHeight, margin, false, fallbacks);
+      });
       
-      addSection("Transskription", dataToUse.transcription);
-      addSection("Resumé af Samtale", dataToUse.summary);
-      addSection("Identificerede Temaer", dataToUse.identifiedThemes && !dataToUse.identifiedThemes.startsWith("Fejl") && dataToUse.identifiedThemes !== fallbacks.themes && !dataToUse.identifiedThemes.startsWith("Ingen specifikke temaer") ? dataToUse.identifiedThemes.split(',').map(t => `- ${t.trim()}`).join('\n') : dataToUse.identifiedThemes);
-      addSection("Whiteboard Indhold", dataToUse.whiteboardContent, true); 
-      addSection("Nye AI Indsigter", dataToUse.newInsights);
-
-      if (dataToUse.generatedImageDataUri && !dataToUse.generatedImageDataUri.startsWith("Fejl") && !dataToUse.generatedImageDataUri.startsWith("Ugyldig prompt") && dataToUse.generatedImageDataUri !== fallbacks.themes) {
-        if (currentY + 80 > pageHeight - margin) { 
-          doc.addPage();
-          currentY = margin;
-        }
-        doc.setFontSize(14);
-        doc.text("AI Genereret Billede", margin, currentY);
-        currentY += 7;
-        try {
-          if (dataToUse.generatedImageDataUri.startsWith('data:image')) {
-            const imgProps = doc.getImageProperties(dataToUse.generatedImageDataUri);
-            const aspectRatio = imgProps.width / imgProps.height;
-            let imgWidth = maxLineWidth * 0.75; 
-            let imgHeight = imgWidth / aspectRatio;
-            const maxHeight = pageHeight - currentY - margin - 5; 
-            
-            if (imgHeight > maxHeight) {
-              imgHeight = maxHeight;
-              imgWidth = imgHeight * aspectRatio;
-            }
-            if (imgWidth > maxLineWidth) {
-              imgWidth = maxLineWidth;
-              imgHeight = imgWidth / aspectRatio;
-            }
-
-            const x = (pageWidth - imgWidth) / 2; 
-            doc.addImage(dataToUse.generatedImageDataUri, imgProps.fileType, x, currentY, imgWidth, imgHeight);
-            currentY += imgHeight + 10;
-          } else {
-             doc.setTextColor(150);
-             doc.text("Fejl: Ugyldigt billedformat for PDF.", margin, currentY);
-             doc.setTextColor(0);
-             currentY += 10;
-          }
-        } catch (e) {
-          console.error("Fejl ved tilføjelse af billede til PDF:", e);
-          doc.setTextColor(150);
-          doc.text("Fejl: Kunne ikke indlæse billede i PDF.", margin, currentY);
-          doc.setTextColor(0);
-          currentY += 10;
-        }
-      } else {
-         if (currentY + 10 > pageHeight - margin) {
-            doc.addPage();
-            currentY = margin;
-          }
-        doc.setFontSize(14);
-        doc.text("AI Genereret Billede", margin, currentY);
-        currentY += 7;
-        doc.setFontSize(11);
-        doc.setTextColor(150);
-        doc.text(dataToUse.generatedImageDataUri && (dataToUse.generatedImageDataUri.includes("Fejl") || dataToUse.generatedImageDataUri.includes("Ugyldig prompt") || dataToUse.generatedImageDataUri === fallbacks.themes) ? dataToUse.generatedImageDataUri : "Intet billede genereret eller tilgængeligt.", margin, currentY);
-        doc.setTextColor(0);
-        currentY += 10;
-      }
-
-      doc.save(`FraimeWorksLite_Resultater_Cyklus_${sessionCycles.indexOf(dataToUse) + 1}_${now.toISOString().split('T')[0]}.pdf`);
+      const filename = isForAllCycles
+        ? `FraimeWorksLite_Alle_Cyklusser_${now.toISOString().split('T')[0]}.pdf`
+        : `FraimeWorksLite_Resultater_Cyklus_${sessionCycles.indexOf(cyclesToPrint[0]) + 1}_${now.toISOString().split('T')[0]}.pdf`;
+      doc.save(filename);
       toast({ title: "Succes", description: "PDF genereret og download startet." });
+
     } catch (error) {
       console.error("Fejl ved PDF-generering:", error);
       toast({ title: "Fejl", description: `Kunne ikke generere PDF: ${error instanceof Error ? error.message : String(error)}`, variant: "destructive" });
     }
   };
 
+  const handleGenerateLatestCyclePdf = () => {
+    const latestCompletedCycle = sessionCycles.length > 0 ? sessionCycles[sessionCycles.length - 1] : null;
+    if (latestCompletedCycle) {
+      generatePdfForCycles([latestCompletedCycle], false);
+    } else {
+      toast({title: "Info", description: "Ingen afsluttede cyklusser at generere PDF fra.", variant: "default"});
+    }
+  };
+
+  const handleGenerateAllCyclesPdf = () => {
+    if (sessionCycles.length > 0) {
+      generatePdfForCycles(sessionCycles, true);
+    } else {
+      toast({title: "Info", description: "Ingen afsluttede cyklusser at generere PDF fra.", variant: "default"});
+    }
+  };
+
+
   const reversedCycles = [...sessionCycles].reverse();
   
-  const isDisplayingActiveData = 
-    isAnyAIProcessRunning || // If any AI process is running for the active cycle
-    (activeCycleData.summary !== fallbacks.summary || 
-     activeCycleData.identifiedThemes !== fallbacks.themes || 
-     activeCycleData.newInsights !== fallbacks.insights); // Or if active data is not just fallbacks
+  const noActiveDataToShow = 
+    activeCycleData.summary === fallbacks.summary &&
+    activeCycleData.identifiedThemes === fallbacks.themes &&
+    activeCycleData.newInsights === fallbacks.insights;
+
+  const isDisplayingActiveData = isAnyAIProcessRunning || !noActiveDataToShow;
 
 
   const ActiveCycleDisplay = () => (
@@ -238,6 +333,18 @@ export function ResultsPanel({
            </p>
         )}
       </div>
+       {(activeCycleData.newInsights && activeCycleData.newInsights !== fallbacks.insights && !activeCycleData.newInsights.startsWith("Fejl") && !activeCycleData.newInsights.startsWith("Kunne ikke") && !activeCycleData.newInsights.startsWith("Ingen specifikke") && !isAnyAIProcessRunning) && (
+         <Button
+            onClick={() => onUseInsightsForNewCycle(activeCycleData.newInsights)}
+            variant="outline"
+            className="w-full sm:w-auto mt-3"
+            disabled={isAnyAIProcessRunning || !canStartNewCycle}
+            aria-label={`Brug indsigter fra igangværende cyklus til ny samtale`}
+          >
+            <MessageSquarePlus className="mr-2 h-4 w-4" />
+            Brug Indsigter fra Igangværende Cyklus
+          </Button>
+      )}
     </div>
   );
 
@@ -249,7 +356,7 @@ export function ResultsPanel({
           AI Analyse Resultater
         </CardTitle>
         <CardDescription>
-          Her vises resultater fra dine analysecyklusser. Du kan downloade den seneste afsluttede cyklus som PDF.
+          Her vises resultater fra dine analysecyklusser. Du kan downloade resultater som PDF.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
@@ -265,7 +372,7 @@ export function ResultsPanel({
                 <div>
                   <h4 className="text-lg font-semibold mb-1 text-foreground">Resumé af Samtale</h4>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
-                    {(cycle.summary && cycle.summary !== fallbacks.summary) ? cycle.summary : <span className="italic">{fallbacks.summary}</span>}
+                    {(cycle.summary && cycle.summary !== fallbacks.summary) ? cycle.summary : <span className="italic">{cycle.summary}</span>}
                   </p>
                 </div>
                 <Separator className="my-3" />
@@ -280,14 +387,14 @@ export function ResultsPanel({
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground italic">{cycle.identifiedThemes === fallbacks.themes ? fallbacks.themes : cycle.identifiedThemes}</p>
+                    <p className="text-sm text-muted-foreground italic">{cycle.identifiedThemes}</p>
                   )}
                 </div>
                 <Separator className="my-3" />
                 <div>
                   <h4 className="text-lg font-semibold mb-1 text-foreground">Nye AI Indsigter</h4>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
-                     {(cycle.newInsights && cycle.newInsights !== fallbacks.insights) ? cycle.newInsights : <span className="italic">{fallbacks.insights}</span>}
+                     {(cycle.newInsights && cycle.newInsights !== fallbacks.insights) ? cycle.newInsights : <span className="italic">{cycle.newInsights}</span>}
                   </p>
                   {(cycle.newInsights && cycle.newInsights !== fallbacks.insights && !cycle.newInsights.startsWith("Fejl") && !cycle.newInsights.startsWith("Kunne ikke") && !cycle.newInsights.startsWith("Ingen specifikke")) && (
                      <Button
@@ -312,16 +419,26 @@ export function ResultsPanel({
           </div>
         </ScrollArea>
         
-        <CardFooter className="p-6 pt-4 border-t border-border">
+        <CardFooter className="p-6 pt-4 border-t border-border flex flex-wrap gap-2 sm:gap-4 justify-start">
           <Button 
             variant="default" 
-            className="w-full sm:w-auto"
-            onClick={handleGeneratePdf}
-            disabled={sessionCycles.length === 0 || (isAnyAIProcessRunning && !sessionCycles.some(c => c.summary !== fallbacks.summary || c.identifiedThemes !== fallbacks.themes))} 
+            className="flex-1 sm:flex-none"
+            onClick={handleGenerateLatestCyclePdf}
+            disabled={sessionCycles.length === 0 || isAnyAIProcessRunning} 
             aria-label="Download resultater fra seneste afsluttede cyklus som PDF"
           >
             <Download className="mr-2 h-4 w-4" />
-            Download Seneste Cyklus som PDF
+            Download Seneste Cyklus (PDF)
+          </Button>
+          <Button 
+            variant="outline" 
+            className="flex-1 sm:flex-none"
+            onClick={handleGenerateAllCyclesPdf}
+            disabled={sessionCycles.length === 0 || isAnyAIProcessRunning} 
+            aria-label="Download resultater fra alle afsluttede cyklusser som PDF"
+          >
+            <FileText className="mr-2 h-4 w-4" />
+            Download Alle Cyklusser (PDF)
           </Button>
         </CardFooter>
       </CardContent>
@@ -329,3 +446,4 @@ export function ResultsPanel({
   );
 }
 
+    

@@ -208,26 +208,30 @@ export function ResultsPanel({
                   Genererer nye indsigter...
                 </div>
               ) : newInsights ? (
-                <>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words mb-3">
-                    {newInsights}
-                  </p>
-                  <Button
-                    onClick={() => onUseInsights(newInsights)}
-                    variant="outline"
-                    className="w-full sm:w-auto"
-                    disabled={isAnyAIProcessRunning}
-                  >
-                    <MessageSquarePlus className="mr-2 h-4 w-4" />
-                    Brug Indsigter til Ny Samtale
-                  </Button>
-                </>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                  {newInsights}
+                </p>
               ) : (
                 <p className="text-sm text-muted-foreground italic">Ingen nye indsigter genereret endnu.</p>
               )}
             </div>
           </div>
         </ScrollArea>
+        
+        {!isLoadingInsights && newInsights && (
+          <div className="p-6 pt-4 border-t border-border">
+            <Button
+              onClick={() => onUseInsights(newInsights)}
+              variant="outline"
+              className="w-full sm:w-auto"
+              disabled={isAnyAIProcessRunning}
+            >
+              <MessageSquarePlus className="mr-2 h-4 w-4" />
+              Brug Indsigter til Ny Samtale
+            </Button>
+          </div>
+        )}
+
         <div className="p-6 pt-4 mt-auto border-t border-border">
           <Button 
             variant="default" 

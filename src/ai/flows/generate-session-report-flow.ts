@@ -11,6 +11,7 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
+// Original schema for the flow's input data
 const CycleDataSchemaForReport = z.object({
   id: z.string(),
   transcription: z.string(),
@@ -30,6 +31,20 @@ const GenerateSessionReportInputSchema = z.object({
 });
 export type GenerateSessionReportInput = z.infer<typeof GenerateSessionReportInputSchema>;
 
+// Schema for the data structure expected by the prompt template (after processing)
+const ProcessedCycleDataSchemaForPrompt = CycleDataSchemaForReport.extend({
+  displayIndex: z.number().describe('The 1-based index for display.'),
+  processedGeneratedImageStatus: z.string().describe('The processed status string for the generated image.'),
+});
+
+const GenerateSessionReportInputSchemaForPrompt = z.object({
+  sessionCycles: z.array(ProcessedCycleDataSchemaForPrompt),
+  reportTitle: z.string().optional(),
+  projectName: z.string().optional(),
+  contactPersons: z.string().optional(),
+});
+
+
 const GenerateSessionReportOutputSchema = z.object({
   reportText: z.string().describe('Den genererede sessionsrapport som en Markdown-formateret streng.'),
 });
@@ -41,7 +56,7 @@ export async function generateSessionReport(input: GenerateSessionReportInput): 
 
 const prompt = ai.definePrompt({
   name: 'generateSessionReportPrompt',
-  input: {schema: GenerateSessionReportInputSchema},
+  input: {schema: GenerateSessionReportInputSchemaForPrompt}, // Uses the processed schema
   output: {schema: GenerateSessionReportOutputSchema},
   prompt: `Du er en AI-assistent, der har til opgave at generere en omfattende sessionsrapport baseret på en række AI-analysecyklusser.
 Strukturer din output præcist som følger, og brug Markdown til formatering af overskrifter og lister. Sørg for, at alle sektioner adresseres.
@@ -87,22 +102,22 @@ Analyserne og genereringen er foretaget ved hjælp af Gemini-modeller via Genkit
 
 ## 3. Iterationsoverblik
 {{#each sessionCycles}}
-### Cyklus {{add @index 1}} – Formål
+### Cyklus {{this.displayIndex}} – Formål
 (Formålet med denne cyklus var typisk at analysere inputteksten: "{{this.transcription}}")
 
 #### Proces & prompt-ændringer
-(I denne applikation er prompts typisk faste for hvert trin. Beskriv kort de generelle trin: transskription/input -> resumé -> temaer -> whiteboard -> billede -> indsigter)
+(I denne applikation er prompts typisk faste for hvert trin. Beskriv kort de generelle trin: transkription/input -> resumé -> temaer -> whiteboard -> billede -> indsigter)
 
 #### AI-genererede billeder (miniaturer)
-*   Billede genereret for cyklus {{add @index 1}}: {{#if (startsWith this.generatedImageDataUri "data:image")}}Billede succesfuldt genereret.{{else if (startsWith this.generatedImageDataUri "Fejl")}}{{this.generatedImageDataUri}}{{else if (startsWith this.generatedImageDataUri "Billedgenerering")}}Billedgenerering sprunget over eller fejlede: {{this.generatedImageDataUri}}.{{else}}Ingen billeddata eller ukendt status.{{/if}} (Bemærk: Miniature-visning er ikke mulig i tekstformat)
+*   Billede genereret for cyklus {{this.displayIndex}}: {{this.processedGeneratedImageStatus}} (Bemærk: Miniature-visning er ikke mulig i tekstformat)
 
-#### Primære indsigter fra cyklus {{add @index 1}}
+#### Primære indsigter fra cyklus {{this.displayIndex}}
 {{#if this.newInsights}}{{this.newInsights}}{{else}}Ingen indsigter genereret for denne cyklus.{{/if}}
 
-#### Nye spørgsmål / næste skridt fra cyklus {{add @index 1}}
+#### Nye spørgsmål / næste skridt fra cyklus {{this.displayIndex}}
 (Baseret på indsigterne fra denne cyklus, hvilke nye spørgsmål eller næste skridt kunne opstå? - formuler 1-2)
 
-#### Whiteboard-highlights / citater fra cyklus {{add @index 1}}
+#### Whiteboard-highlights / citater fra cyklus {{this.displayIndex}}
 {{#if this.whiteboardContent}}{{this.whiteboardContent}}{{else}}Intet whiteboard-indhold genereret for denne cyklus.{{/if}}
 ---
 {{/each}}
@@ -135,14 +150,14 @@ Analyserne og genereringen er foretaget ved hjælp af Gemini-modeller via Genkit
 Generer rapporten baseret på de {{sessionCycles.length}} cyklusser.
 Data for cyklusserne:
 {{#each sessionCycles}}
---- Cyklus {{add @index 1}} Data ---
+--- Cyklus {{this.displayIndex}} Data ---
 Transskription/Input: {{{this.transcription}}}
 Resumé: {{{this.summary}}}
 Identificerede Temaer: {{{this.identifiedThemes}}}
 Whiteboard Indhold: {{{this.whiteboardContent}}}
 Genereret Billede Status/Prompt: {{{this.generatedImageDataUri}}} (Bemærk: Selve billeddataen er en lang streng, hvis det er en data URI; ellers en statusbesked)
 Nye Indsigter: {{{this.newInsights}}}
---- Slut Cyklus {{add @index 1}} Data ---
+--- Slut Cyklus {{this.displayIndex}} Data ---
 {{/each}}
 `,
 });
@@ -150,21 +165,42 @@ Nye Indsigter: {{{this.newInsights}}}
 const generateSessionReportFlow = ai.defineFlow(
   {
     name: 'generateSessionReportFlow',
-    inputSchema: GenerateSessionReportInputSchema,
+    inputSchema: GenerateSessionReportInputSchema, // Flow's external input schema
     outputSchema: GenerateSessionReportOutputSchema,
   },
   async (input) => {
-    // Helper for Handlebars to check if a string starts with another string
-    ai.registry.addHandlebarsHelper('startsWith', (str: string, prefix: string) => str.startsWith(prefix));
-    ai.registry.addHandlebarsHelper('add', (a: number, b: number) => a + b);
-
-
     if (!input.sessionCycles || input.sessionCycles.length === 0) {
       return { reportText: "Ingen cyklusdata at generere rapport fra." };
     }
+
+    const processedSessionCycles = input.sessionCycles.map((cycle, index) => {
+      let imageStatusMsg = "Ingen billeddata eller ukendt status.";
+      if (cycle.generatedImageDataUri) {
+        if (cycle.generatedImageDataUri.startsWith("data:image")) {
+          imageStatusMsg = "Billede succesfuldt genereret.";
+        } else if (cycle.generatedImageDataUri.startsWith("Fejl")) {
+          imageStatusMsg = cycle.generatedImageDataUri;
+        } else if (cycle.generatedImageDataUri.startsWith("Billedgenerering")) {
+          imageStatusMsg = `Billedgenerering sprunget over eller fejlede: ${cycle.generatedImageDataUri}.`;
+        } else if (cycle.generatedImageDataUri.trim() !== "") {
+            imageStatusMsg = cycle.generatedImageDataUri; // If it's some other status message
+        }
+      }
+
+      return {
+        ...cycle,
+        displayIndex: index + 1,
+        processedGeneratedImageStatus: imageStatusMsg,
+      };
+    });
+
+    const promptInput = {
+      ...input,
+      sessionCycles: processedSessionCycles,
+    };
     
     try {
-      const {output} = await prompt(input);
+      const {output} = await prompt(promptInput); // Call prompt with processed data
       if (!output || typeof output.reportText !== 'string' || output.reportText.trim() === "") {
         console.error("GenerateSessionReportFlow: Output fra prompt var ugyldigt eller manglede rapporttekst.", output);
         return { reportText: "Kunne ikke generere sessionsrapport." };

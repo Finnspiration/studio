@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { AppHeader } from "@/components/app-header";
-import { InfoPanel } from "@/components/info-panel"; // Added import
+import { InfoPanel } from "@/components/info-panel";
 import { WhiteboardPanel } from "@/components/whiteboard-panel";
 import { ControlsPanel } from "@/components/controls-panel";
 import { ResultsPanel } from "@/components/results-panel";
@@ -21,6 +21,9 @@ import { transcribeAudio } from '@/ai/flows/transcribe-audio-flow';
 import type { TranscribeAudioInput, TranscribeAudioOutput } from '@/ai/flows/transcribe-audio-flow';
 import { generateInsights } from '@/ai/flows/generate-insights-flow';
 import type { GenerateInsightsInput, GenerateInsightsOutput } from '@/ai/flows/generate-insights-flow';
+import { generateSessionReport } from '@/ai/flows/generate-session-report-flow';
+import type { GenerateSessionReportInput, GenerateSessionReportOutput, CycleDataForReport } from '@/ai/flows/generate-session-report-flow';
+
 
 export interface CycleData {
   id: string;
@@ -51,6 +54,9 @@ export default function SynapseScribblePage() {
   const [activeNewInsights, setActiveNewInsights] = useState<string>(FALLBACK_EMPTY_INSIGHTS);
   
   const [sessionCycles, setSessionCycles] = useState<CycleData[]>([]);
+  const [sessionReport, setSessionReport] = useState<string>("");
+  const [isGeneratingReport, setIsGeneratingReport] = useState<boolean>(false);
+
 
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
@@ -61,8 +67,8 @@ export default function SynapseScribblePage() {
 
   const { toast } = useToast();
 
-  const resetActiveCycleOutputs = (clearFullTranscription = false) => {
-    if (clearFullTranscription) setActiveTranscription("");
+  const resetActiveCycleOutputs = (keepTranscription = false) => {
+    if (!keepTranscription) setActiveTranscription("");
     setActiveSummary(FALLBACK_EMPTY_SUMMARY);
     setActiveIdentifiedThemes(FALLBACK_EMPTY_THEMES);
     setActiveWhiteboardContent(FALLBACK_EMPTY_WHITEBOARD);
@@ -92,7 +98,7 @@ export default function SynapseScribblePage() {
       toast({ title: "Max cyklusser nået", description: `Du kan maksimalt have ${MAX_CYCLES} analysecyklusser. Start en ny session for flere.`, variant: "default" });
       return false;
     }
-    resetActiveCycleOutputs(isFromInsights ? false : true); 
+    resetActiveCycleOutputs(!isFromInsights); 
     setActiveTranscription(transcription);
     return true;
   }
@@ -254,7 +260,7 @@ export default function SynapseScribblePage() {
       try {        
         const input: GenerateImageInput = { prompt: coreImagePrompt, style: imageStyleInstruction };
         const result = await generateImage(input);
-        if (!result || !result.imageDataUri || result.imageDataUri.trim() === "" || result.imageDataUri.startsWith("Fejl") || result.imageDataUri.startsWith("Ugyldig prompt")) {
+        if (!result || !result.imageDataUri || result.imageDataUri.trim() === "" || result.imageDataUri.startsWith("Fejl") || result.imageDataUri.startsWith("Ugyldig prompt") || result.imageDataUri.startsWith("Ugyldig KERNEL")) {
           currentImageDataUri = result?.imageDataUri || FALLBACK_EMPTY_IMAGE;
           toast({ title: "Fejl ved billedgenerering", description: currentImageDataUri, variant: "destructive" });
         } else {
@@ -283,7 +289,7 @@ export default function SynapseScribblePage() {
     conversationContext: string 
   ): Promise<Omit<CycleData, 'id'>> => {
     let currentNewInsights = FALLBACK_EMPTY_INSIGHTS;
-     if (imageDataUri.startsWith("Fejl") || imageDataUri === FALLBACK_EMPTY_IMAGE ||
+     if (imageDataUri.startsWith("Fejl") || imageDataUri === FALLBACK_EMPTY_IMAGE || imageDataUri.startsWith("Billedgenerering sprunget") ||
          conversationContext.startsWith("Fejl") || conversationContext === FALLBACK_EMPTY_SUMMARY) {
        toast({ title: "Info", description: "Forrige trin fejlede eller manglede input. Kan ikke generere indsigter.", variant: "default" });
        currentNewInsights = imageDataUri.startsWith("Fejl") ? imageDataUri : (conversationContext.startsWith("Fejl") ? conversationContext : "Indsigtsgenerering sprunget over pga. tidligere fejl eller manglende input.");
@@ -342,11 +348,14 @@ export default function SynapseScribblePage() {
     setSessionCycles(prevCycles => {
       const updatedCycles = [...prevCycles, newCycle];
       if (updatedCycles.length < MAX_CYCLES) {
+        // Only reset these for the "active" display if we can start a new cycle
         setActiveSummary(FALLBACK_EMPTY_SUMMARY);
         setActiveIdentifiedThemes(FALLBACK_EMPTY_THEMES);
         setActiveNewInsights(FALLBACK_EMPTY_INSIGHTS);
+        // Keep whiteboard and image from last cycle for display until new one starts
       } else {
-        resetActiveCycleOutputs(false); 
+        // Max cycles reached, reset all active outputs except transcription if it's from insights
+        resetActiveCycleOutputs(activeTranscription === dataForCycle.newInsights ? true : false);
       }
       return updatedCycles;
     });
@@ -363,8 +372,75 @@ export default function SynapseScribblePage() {
   const handleResetSession = () => {
     resetActiveCycleOutputs(true); 
     setSessionCycles([]);
+    setSessionReport(""); // Also reset the generated report
     toast({ title: "Session Nulstillet", description: "Alle data er ryddet. Du kan starte forfra." });
   };
+
+  const handleGenerateSessionReport = async () => {
+    if (sessionCycles.length === 0) {
+      toast({ title: "Ingen data", description: "Der er ingen gennemførte cyklusser at generere rapport fra.", variant: "default" });
+      return;
+    }
+    setIsGeneratingReport(true);
+    setSessionReport("Genererer rapport...");
+    try {
+      // Prepare data for the flow
+      const cyclesForReport: CycleDataForReport[] = sessionCycles.map(cycle => ({
+        id: cycle.id,
+        transcription: cycle.transcription,
+        summary: cycle.summary,
+        identifiedThemes: cycle.identifiedThemes,
+        whiteboardContent: cycle.whiteboardContent,
+        generatedImageDataUri: cycle.generatedImageDataUri,
+        newInsights: cycle.newInsights,
+      }));
+
+      // Potentially get these from InfoPanel state if it were lifted up
+      const reportTitle = `AI Analyse Rapport - ${new Date().toLocaleDateString('da-DK')}`;
+      const projectName = "FraimeWorks Lite Session"; 
+      
+      const input: GenerateSessionReportInput = { 
+        sessionCycles: cyclesForReport,
+        reportTitle,
+        projectName,
+       };
+      const result = await generateSessionReport(input);
+
+      if (!result || !result.reportText || result.reportText.trim() === "" || result.reportText.startsWith("Fejl") || result.reportText.startsWith("Kunne ikke")) {
+        const errorMsg = result?.reportText || "Sessionsrapporten kunne ikke genereres eller returnerede tomt resultat.";
+        toast({ title: "Fejl ved Rapportgenerering", description: errorMsg, variant: "destructive" });
+        setSessionReport(errorMsg);
+      } else {
+        setSessionReport(result.reportText);
+        toast({ title: "Succes", description: "Sessionsrapport genereret." });
+      }
+    } catch (error) {
+      const userMessage = getAIUserErrorMessage(error, "Fejl ved generering af sessionsrapport");
+      toast({ title: "Fejl", description: userMessage, variant: "destructive" });
+      setSessionReport(userMessage);
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
+  const handleDownloadSessionReport = () => {
+    if (!sessionReport || sessionReport.trim() === "" || sessionReport.startsWith("Genererer") || sessionReport.startsWith("Fejl") || sessionReport.startsWith("Kunne ikke")) {
+      toast({ title: "Ingen rapport", description: "Der er ingen rapport at downloade.", variant: "default" });
+      return;
+    }
+    const blob = new Blob([sessionReport], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const timestamp = new Date().toISOString().split('T')[0];
+    link.setAttribute('download', `FraimeWorksLite_SessionRapport_${timestamp}.md`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: "Download Startet", description: "Sessionsrapport downloades som Markdown-fil." });
+  };
+
 
   const currentLoadingStateText = () => {
     if (isRecording) return "Optager lyd...";
@@ -382,7 +458,7 @@ export default function SynapseScribblePage() {
   let imgUriToShow = activeGeneratedImageDataUri;
   
   const isPreparingNewCycleViaText = activeTranscription !== "" && 
-                                     activeTranscription !== FALLBACK_EMPTY_TRANSCRIPTION &&
+                                     !activeTranscription.startsWith("Fejl") && 
                                      !activeTranscription.startsWith("Optager lyd...") && 
                                      activeSummary === FALLBACK_EMPTY_SUMMARY && 
                                      activeIdentifiedThemes === FALLBACK_EMPTY_THEMES &&
@@ -397,7 +473,6 @@ export default function SynapseScribblePage() {
         if (imgUriToShow === FALLBACK_EMPTY_IMAGE) imgUriToShow = lastCompletedCycle.generatedImageDataUri;
     }
   }
-
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -443,13 +518,20 @@ export default function SynapseScribblePage() {
               summary: FALLBACK_EMPTY_SUMMARY,
               themes: FALLBACK_EMPTY_THEMES,
               insights: FALLBACK_EMPTY_INSIGHTS,
+              // These are not directly used by ResultsPanel for its active display but good for consistency
               whiteboard: FALLBACK_EMPTY_WHITEBOARD, 
               image: FALLBACK_EMPTY_IMAGE,           
               transcription: FALLBACK_EMPTY_TRANSCRIPTION 
             }}
+            sessionReport={sessionReport}
+            isGeneratingReport={isGeneratingReport}
+            onGenerateSessionReport={handleGenerateSessionReport}
+            onDownloadSessionReport={handleDownloadSessionReport}
           />
         </div>
       </main>
     </div>
   );
 }
+
+    

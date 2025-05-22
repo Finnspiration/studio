@@ -5,11 +5,14 @@ import jsPDF from 'jspdf';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, MessageSquarePlus, Download, Brain, FileText } from 'lucide-react';
+import { Loader2, MessageSquarePlus, Download, Brain, FileText, BarChartBig } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import type { CycleData } from '@/app/page'; 
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea'; // Added for report display
+import { Label } from '@/components/ui/label'; // Added for report display
+
 
 interface ResultsPanelProps {
   sessionCycles: CycleData[];
@@ -28,6 +31,10 @@ interface ResultsPanelProps {
     themes: string;
     insights: string;
   };
+  sessionReport: string;
+  isGeneratingReport: boolean;
+  onGenerateSessionReport: () => Promise<void>;
+  onDownloadSessionReport: () => void;
 }
 
 // Helper function to add a text section to the PDF
@@ -40,7 +47,7 @@ const addTextSectionToPdf = (
   pageHeight: number,
   margin: number,
   isPreformatted = false,
-  fallbacks: { summary: string, themes: string, insights: string }
+  fallbackText: string 
 ): number => {
   let y = currentY;
   if (y + 10 > pageHeight - margin) { 
@@ -52,31 +59,25 @@ const addTextSectionToPdf = (
   y += 7;
   doc.setFontSize(11);
   
-  const fallbackContent = title.includes("Resumé") ? fallbacks.summary : 
-                         title.includes("Temaer") ? fallbacks.themes :
-                         title.includes("Indsigter") ? fallbacks.insights :
-                         "Intet indhold genereret eller tilgængeligt.";
+  const displayContent = (content && content.trim() && !content.startsWith("Fejl") && !content.startsWith("Kunne ikke") && !content.startsWith("Ingen specifikke") && content !== fallbackText)
+    ? content
+    : (content && content.trim() ? content : fallbackText);
 
-  if (content && content.trim() && !content.startsWith("Fejl") && !content.startsWith("Kunne ikke") && !content.startsWith("Ingen specifikke") && content !== fallbackContent) {
-    const lines = doc.splitTextToSize(content, pageWidth - margin * 2);
-    lines.forEach((line: string) => {
-      if (y + (isPreformatted ? 5 : 6) > pageHeight - margin) { 
-        doc.addPage();
-        y = margin;
-      }
-      doc.text(line, margin, y);
-      y += (isPreformatted ? 5 : 6); 
-    });
-  } else {
-    if (y + 6 > pageHeight - margin) {
-        doc.addPage();
-        y = margin;
+  const lines = doc.splitTextToSize(displayContent, pageWidth - margin * 2);
+  lines.forEach((line: string) => {
+    if (y + (isPreformatted ? 5 : 6) > pageHeight - margin) { 
+      doc.addPage();
+      y = margin;
     }
-    doc.setTextColor(150);
-    doc.text(content && content.trim() ? content : fallbackContent, margin, y);
-    doc.setTextColor(0);
-    y += 6;
-  }
+    if (displayContent === fallbackText || (content && (content.startsWith("Fejl") || content.startsWith("Kunne ikke") || content.startsWith("Ingen specifikke")))){
+        doc.setTextColor(150); // Grey for fallback/error
+    }
+    doc.text(line, margin, y);
+    if (displayContent === fallbackText || (content && (content.startsWith("Fejl") || content.startsWith("Kunne ikke") || content.startsWith("Ingen specifikke")))){
+        doc.setTextColor(0); // Reset to black
+    }
+    y += (isPreformatted ? 5 : 6); 
+  });
   y += 5; 
   return y;
 };
@@ -90,7 +91,7 @@ const addImageSectionToPdf = (
   pageWidth: number,
   pageHeight: number,
   margin: number,
-  fallbackImageText: string
+  fallbackImageText: string 
 ): number => {
   let y = currentY;
   if (y + 10 > pageHeight - margin) { 
@@ -101,11 +102,13 @@ const addImageSectionToPdf = (
   doc.text(title, margin, y);
   y += 7;
 
+  const isErrorOrPlaceholderImage = !imageDataUri || imageDataUri.startsWith("Fejl") || imageDataUri.startsWith("Billedgenerering") || imageDataUri === fallbackImageText;
+
+
   if (imageDataUri && imageDataUri.startsWith('data:image')) {
     if (y + 80 > pageHeight - margin) { // Approximate height for image section
       doc.addPage();
       y = margin;
-      // Re-add title on new page if needed
       doc.setFontSize(14);
       doc.text(title, margin, y);
       y += 7;
@@ -141,14 +144,13 @@ const addImageSectionToPdf = (
      if (y + 10 > pageHeight - margin) {
         doc.addPage();
         y = margin;
-        // Re-add title on new page if needed
         doc.setFontSize(14);
         doc.text(title, margin, y);
         y += 7;
       }
     doc.setFontSize(11);
     doc.setTextColor(150);
-    doc.text(imageDataUri && (imageDataUri.includes("Fejl") || imageDataUri.includes("Ugyldig prompt") || imageDataUri === fallbackImageText) ? imageDataUri : fallbackImageText, margin, y);
+    doc.text(imageDataUri && imageDataUri.trim() ? imageDataUri : fallbackImageText, margin, y);
     doc.setTextColor(0);
     y += 10;
   }
@@ -165,6 +167,10 @@ export function ResultsPanel({
   isAnyAIProcessRunning,
   canStartNewCycle,
   fallbacks,
+  sessionReport,
+  isGeneratingReport,
+  onGenerateSessionReport,
+  onDownloadSessionReport,
 }: ResultsPanelProps) {
   const { toast } = useToast();
 
@@ -174,23 +180,19 @@ export function ResultsPanel({
       return;
     }
     
-    if (isForAllCycles && cyclesToPrint.every(c => 
-        c.summary === fallbacks.summary && 
-        c.identifiedThemes === fallbacks.themes &&
-        c.newInsights === fallbacks.insights &&
-        c.whiteboardContent === fallbacks.themes && 
-        c.generatedImageDataUri === fallbacks.themes 
-    )) {
+    const hasMeaningfulData = (cycle: CycleData) => 
+        cycle.summary !== fallbacks.summary || 
+        cycle.identifiedThemes !== fallbacks.themes ||
+        cycle.newInsights !== fallbacks.insights ||
+        (cycle.whiteboardContent && cycle.whiteboardContent !== "Whiteboard-indhold utilgængeligt.") ||
+        (cycle.generatedImageDataUri && cycle.generatedImageDataUri !== "Billedgenerering fejlede eller intet billede returneret." && !cycle.generatedImageDataUri.startsWith("Billedgenerering sprunget"));
+
+
+    if (isForAllCycles && !cyclesToPrint.some(hasMeaningfulData)) {
         toast({title: "Info", description: "Ingen meningsfulde data i nogen cyklus at generere PDF fra.", variant: "default"});
         return;
     }
-     if (!isForAllCycles && cyclesToPrint.length === 1 &&
-        cyclesToPrint[0].summary === fallbacks.summary && 
-        cyclesToPrint[0].identifiedThemes === fallbacks.themes &&
-        cyclesToPrint[0].newInsights === fallbacks.insights &&
-        cyclesToPrint[0].whiteboardContent === fallbacks.themes &&
-        cyclesToPrint[0].generatedImageDataUri === fallbacks.themes
-       ) {
+     if (!isForAllCycles && cyclesToPrint.length === 1 && !hasMeaningfulData(cyclesToPrint[0])) {
         toast({title: "Info", description: "Ingen meningsfulde data i seneste afsluttede cyklus at generere PDF fra.", variant: "default"});
         return;
     }
@@ -211,7 +213,7 @@ export function ResultsPanel({
       doc.setFontSize(18);
       const pdfTitle = isForAllCycles 
         ? `FraimeWorks Lite - Alle Resultater (${cyclesToPrint.length} Cyklusser)` 
-        : `FraimeWorks Lite - Resultater (Cyklus ${sessionCycles.indexOf(cyclesToPrint[0]) + 1})`;
+        : `FraimeWorks Lite - Resultater (Cyklus ${sessionCycles.findIndex(c => c.id === cyclesToPrint[0].id) + 1})`;
       doc.text(pdfTitle, pageWidth / 2, currentY, { align: 'center' });
       currentY += 10;
       
@@ -220,31 +222,31 @@ export function ResultsPanel({
       currentY += 10;
 
       cyclesToPrint.forEach((cycleData, index) => {
-        if (index > 0) { // Add page break before new cycle, except for the first one
+        if (index > 0) { 
           doc.addPage();
           currentY = margin;
         }
         
         if (isForAllCycles) {
             doc.setFontSize(16);
-            doc.text(`Cyklus ${sessionCycles.indexOf(cycleData) + 1}`, margin, currentY);
+            doc.text(`Cyklus ${sessionCycles.findIndex(c => c.id === cycleData.id) + 1}`, margin, currentY);
             currentY += 10;
         }
 
-        currentY = addTextSectionToPdf(doc, "Transskription", cycleData.transcription, currentY, pageWidth, pageHeight, margin, false, fallbacks);
-        currentY = addTextSectionToPdf(doc, "Resumé af Samtale", cycleData.summary, currentY, pageWidth, pageHeight, margin, false, fallbacks);
+        currentY = addTextSectionToPdf(doc, "Transskription", cycleData.transcription, currentY, pageWidth, pageHeight, margin, false, "Transskription utilgængelig");
+        currentY = addTextSectionToPdf(doc, "Resumé af Samtale", cycleData.summary, currentY, pageWidth, pageHeight, margin, false, fallbacks.summary);
         const themesText = (cycleData.identifiedThemes && cycleData.identifiedThemes !== fallbacks.themes && !cycleData.identifiedThemes.startsWith("Fejl") && !cycleData.identifiedThemes.startsWith("Kunne ikke") && !cycleData.identifiedThemes.startsWith("Ingen specifikke temaer")) 
             ? cycleData.identifiedThemes.split(',').map(t => `- ${t.trim()}`).join('\n') 
             : cycleData.identifiedThemes;
-        currentY = addTextSectionToPdf(doc, "Identificerede Temaer", themesText, currentY, pageWidth, pageHeight, margin, true, fallbacks);
-        currentY = addTextSectionToPdf(doc, "Whiteboard Indhold", cycleData.whiteboardContent, currentY, pageWidth, pageHeight, margin, true, fallbacks);
-        currentY = addImageSectionToPdf(doc, "AI Genereret Billede", cycleData.generatedImageDataUri, currentY, pageWidth, pageHeight, margin, fallbacks.themes); // Using themes fallback as a generic "not available" text
-        currentY = addTextSectionToPdf(doc, "Nye AI Indsigter", cycleData.newInsights, currentY, pageWidth, pageHeight, margin, false, fallbacks);
+        currentY = addTextSectionToPdf(doc, "Identificerede Temaer", themesText, currentY, pageWidth, pageHeight, margin, true, fallbacks.themes);
+        currentY = addTextSectionToPdf(doc, "Whiteboard Indhold", cycleData.whiteboardContent, currentY, pageWidth, pageHeight, margin, true, "Whiteboard-indhold utilgængeligt.");
+        currentY = addImageSectionToPdf(doc, "AI Genereret Billede", cycleData.generatedImageDataUri, currentY, pageWidth, pageHeight, margin, "Intet billede genereret eller tilgængeligt.");
+        currentY = addTextSectionToPdf(doc, "Nye AI Indsigter", cycleData.newInsights, currentY, pageWidth, pageHeight, margin, false, fallbacks.insights);
       });
       
       const filename = isForAllCycles
         ? `FraimeWorksLite_Alle_Cyklusser_${now.toISOString().split('T')[0]}.pdf`
-        : `FraimeWorksLite_Resultater_Cyklus_${sessionCycles.indexOf(cyclesToPrint[0]) + 1}_${now.toISOString().split('T')[0]}.pdf`;
+        : `FraimeWorksLite_Resultater_Cyklus_${sessionCycles.findIndex(c => c.id === cyclesToPrint[0].id) + 1}_${now.toISOString().split('T')[0]}.pdf`;
       doc.save(filename);
       toast({ title: "Succes", description: "PDF genereret og download startet." });
 
@@ -279,11 +281,12 @@ export function ResultsPanel({
     activeCycleData.identifiedThemes === fallbacks.themes &&
     activeCycleData.newInsights === fallbacks.insights;
 
+  // Display "Igangværende Cyklus" if AI is running OR if there's active data that isn't just the initial fallbacks
   const isDisplayingActiveData = isAnyAIProcessRunning || !noActiveDataToShow;
 
 
   const ActiveCycleDisplay = () => (
-    <div className={`mb-8 p-4 border border-border rounded-lg shadow-sm bg-card ${isAnyAIProcessRunning ? 'border-primary animate-pulse' : ''}`}>
+    <div className={`mb-6 p-4 border border-border rounded-lg shadow-sm bg-card ${isAnyAIProcessRunning ? 'border-primary animate-pulse' : ''}`}>
       <h3 className="text-xl font-semibold mb-3 text-primary">Igangværende Cyklus {sessionCycles.length + 1}</h3>
       <div>
         <h4 className="text-lg font-semibold mb-1 text-foreground">Resumé af Samtale</h4>
@@ -295,7 +298,7 @@ export function ResultsPanel({
           <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{activeCycleData.summary}</p>
         ) : (
           <p className="text-sm text-muted-foreground italic">
-            {activeCycleData.summary === fallbacks.summary && isAnyAIProcessRunning ? "Bearbejder..." : activeCycleData.summary}
+            {activeCycleData.summary === fallbacks.summary && isAnyAIProcessRunning ? "Bearbejder..." : (activeCycleData.summary || fallbacks.summary)}
           </p>
         )}
       </div>
@@ -314,7 +317,7 @@ export function ResultsPanel({
           </div>
         ) : (
           <p className="text-sm text-muted-foreground italic">
-            {activeCycleData.identifiedThemes === fallbacks.themes && isAnyAIProcessRunning ? "Bearbejder..." : activeCycleData.identifiedThemes}
+            {activeCycleData.identifiedThemes === fallbacks.themes && isAnyAIProcessRunning ? "Bearbejder..." : (activeCycleData.identifiedThemes || fallbacks.themes)}
           </p>
         )}
       </div>
@@ -329,7 +332,7 @@ export function ResultsPanel({
           <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{activeCycleData.newInsights}</p>
         ) : (
            <p className="text-sm text-muted-foreground italic">
-             {activeCycleData.newInsights === fallbacks.insights && isAnyAIProcessRunning ? "Bearbejder..." : activeCycleData.newInsights}
+             {activeCycleData.newInsights === fallbacks.insights && isAnyAIProcessRunning ? "Bearbejder..." : (activeCycleData.newInsights || fallbacks.insights)}
            </p>
         )}
       </div>
@@ -349,100 +352,166 @@ export function ResultsPanel({
   );
 
   return (
-    <Card className="shadow-lg flex-1 flex flex-col overflow-hidden">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Brain className="h-6 w-6 text-primary" /> 
-          AI Analyse Resultater
-        </CardTitle>
-        <CardDescription>
-          Her vises resultater fra dine analysecyklusser. Du kan downloade resultater som PDF.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
-        <ScrollArea className="flex-1"> 
-          <div className="space-y-0 p-6 pb-6">
-            {isDisplayingActiveData && (
-              <ActiveCycleDisplay />
-            )}
+    <div className="flex flex-col h-full"> {/* Ensure this parent can provide flex context */}
+      <Card className="shadow-lg flex-1 flex flex-col overflow-hidden"> {/* This card will take up available space */}
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="h-6 w-6 text-primary" /> 
+            AI Analyse Resultater
+          </CardTitle>
+          <CardDescription>
+            Her vises resultater fra dine analysecyklusser. Du kan downloade resultater som PDF eller en samlet rapport.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex-1 flex flex-col overflow-hidden p-0"> {/* Content area for scrolling */}
+          <ScrollArea className="flex-1 p-6 pb-0"> {/* ScrollArea takes remaining space and has its own padding */}
+            <div className="space-y-0">
+              {isDisplayingActiveData && (
+                <ActiveCycleDisplay />
+              )}
 
-            {reversedCycles.map((cycle, index) => (
-              <div key={cycle.id} className="mb-8 p-4 border border-border rounded-lg shadow-sm bg-card">
-                <h3 className="text-xl font-semibold mb-3 text-primary">Cyklus {sessionCycles.length - index}</h3>
-                <div>
-                  <h4 className="text-lg font-semibold mb-1 text-foreground">Resumé af Samtale</h4>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
-                    {(cycle.summary && cycle.summary !== fallbacks.summary) ? cycle.summary : <span className="italic">{cycle.summary}</span>}
-                  </p>
+              {reversedCycles.map((cycle, index) => (
+                <div key={cycle.id} className="mb-6 p-4 border border-border rounded-lg shadow-sm bg-card">
+                  <h3 className="text-xl font-semibold mb-3 text-primary">Cyklus {sessionCycles.length - index}</h3>
+                  <div>
+                    <h4 className="text-lg font-semibold mb-1 text-foreground">Resumé af Samtale</h4>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                      {(cycle.summary && cycle.summary !== fallbacks.summary && !cycle.summary.startsWith("Fejl") && !cycle.summary.startsWith("Kunne ikke")) ? cycle.summary : <span className="italic">{cycle.summary || fallbacks.summary}</span>}
+                    </p>
+                  </div>
+                  <Separator className="my-3" />
+                  <div>
+                    <h4 className="text-lg font-semibold mb-1 text-foreground">Identificerede Temaer</h4>
+                    {(cycle.identifiedThemes && cycle.identifiedThemes !== fallbacks.themes && !cycle.identifiedThemes.startsWith("Fejl") && !cycle.identifiedThemes.startsWith("Kunne ikke") && !cycle.identifiedThemes.startsWith("Ingen specifikke temaer")) ? (
+                      <div className="flex flex-wrap gap-2">
+                        {cycle.identifiedThemes.split(',').map((theme, idx) => (
+                          <span key={idx} className="inline-block bg-accent/80 text-accent-foreground rounded-full px-3 py-1 text-xs font-semibold shadow-sm">
+                            {theme.trim()}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">{cycle.identifiedThemes || fallbacks.themes}</p>
+                    )}
+                  </div>
+                  <Separator className="my-3" />
+                  <div>
+                    <h4 className="text-lg font-semibold mb-1 text-foreground">Nye AI Indsigter</h4>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                       {(cycle.newInsights && cycle.newInsights !== fallbacks.insights && !cycle.newInsights.startsWith("Fejl") && !cycle.newInsights.startsWith("Kunne ikke") && !cycle.newInsights.startsWith("Ingen specifikke")) ? cycle.newInsights : <span className="italic">{cycle.newInsights || fallbacks.insights}</span>}
+                    </p>
+                    {(cycle.newInsights && cycle.newInsights !== fallbacks.insights && !cycle.newInsights.startsWith("Fejl") && !cycle.newInsights.startsWith("Kunne ikke") && !cycle.newInsights.startsWith("Ingen specifikke")) && (
+                       <Button
+                          onClick={() => onUseInsightsForNewCycle(cycle.newInsights)}
+                          variant="outline"
+                          className="w-full sm:w-auto mt-2"
+                          disabled={isAnyAIProcessRunning || !canStartNewCycle}
+                          aria-label={`Brug indsigter fra cyklus ${sessionCycles.length - index} til ny samtale`}
+                        >
+                          <MessageSquarePlus className="mr-2 h-4 w-4" />
+                          Brug Indsigter fra Cyklus {sessionCycles.length - index}
+                        </Button>
+                    )}
+                  </div>
+                   {index < reversedCycles.length -1 && !(isDisplayingActiveData && index === 0 && reversedCycles.length > 1) && <Separator className="my-4 border-dashed" />}
                 </div>
-                <Separator className="my-3" />
-                <div>
-                  <h4 className="text-lg font-semibold mb-1 text-foreground">Identificerede Temaer</h4>
-                  {(cycle.identifiedThemes && cycle.identifiedThemes !== fallbacks.themes && !cycle.identifiedThemes.startsWith("Fejl") && !cycle.identifiedThemes.startsWith("Kunne ikke") && !cycle.identifiedThemes.startsWith("Ingen specifikke temaer")) ? (
-                    <div className="flex flex-wrap gap-2">
-                      {cycle.identifiedThemes.split(',').map((theme, idx) => (
-                        <span key={idx} className="inline-block bg-accent/80 text-accent-foreground rounded-full px-3 py-1 text-xs font-semibold shadow-sm">
-                          {theme.trim()}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground italic">{cycle.identifiedThemes}</p>
-                  )}
-                </div>
-                <Separator className="my-3" />
-                <div>
-                  <h4 className="text-lg font-semibold mb-1 text-foreground">Nye AI Indsigter</h4>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
-                     {(cycle.newInsights && cycle.newInsights !== fallbacks.insights) ? cycle.newInsights : <span className="italic">{cycle.newInsights}</span>}
-                  </p>
-                  {(cycle.newInsights && cycle.newInsights !== fallbacks.insights && !cycle.newInsights.startsWith("Fejl") && !cycle.newInsights.startsWith("Kunne ikke") && !cycle.newInsights.startsWith("Ingen specifikke")) && (
-                     <Button
-                        onClick={() => onUseInsightsForNewCycle(cycle.newInsights)}
-                        variant="outline"
-                        className="w-full sm:w-auto mt-2"
-                        disabled={isAnyAIProcessRunning || !canStartNewCycle}
-                        aria-label={`Brug indsigter fra cyklus ${sessionCycles.length - index} til ny samtale`}
-                      >
-                        <MessageSquarePlus className="mr-2 h-4 w-4" />
-                        Brug Indsigter fra Cyklus {sessionCycles.length - index}
-                      </Button>
-                  )}
-                </div>
-                 {index < reversedCycles.length -1 && !(isDisplayingActiveData && index === 0 && reversedCycles.length > 1) && <Separator className="my-6 border-dashed" />}
-              </div>
-            ))}
-            
-            {sessionCycles.length === 0 && !isDisplayingActiveData && (
-                <p className="text-sm text-muted-foreground text-center py-10">Ingen analysecyklusser er kørt endnu. Start en analyse i kontrolpanelet.</p>
-            )}
+              ))}
+              
+              {sessionCycles.length === 0 && !isDisplayingActiveData && (
+                  <p className="text-sm text-muted-foreground text-center py-10">Ingen analysecyklusser er kørt endnu. Start en analyse i kontrolpanelet.</p>
+              )}
+            </div>
+          </ScrollArea>
+          
+          <CardFooter className="p-6 pt-4 border-t border-border flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4 justify-start">
+            <Button 
+              variant="default" 
+              className="flex-1 sm:flex-none min-w-[200px]"
+              onClick={handleGenerateLatestCyclePdf}
+              disabled={sessionCycles.length === 0 || isAnyAIProcessRunning || isGeneratingReport} 
+              aria-label="Download resultater fra seneste afsluttede cyklus som PDF"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download Seneste Cyklus (PDF)
+            </Button>
+            <Button 
+              variant="outline" 
+              className="flex-1 sm:flex-none min-w-[200px]"
+              onClick={handleGenerateAllCyclesPdf}
+              disabled={sessionCycles.length === 0 || isAnyAIProcessRunning || isGeneratingReport} 
+              aria-label="Download resultater fra alle afsluttede cyklusser som PDF"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Download Alle Cyklusser (PDF)
+            </Button>
+          </CardFooter>
+        </CardContent>
+      </Card>
+
+      {/* Session Report Panel */}
+      <Card className="shadow-lg mt-4 flex-1 flex flex-col overflow-hidden">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChartBig className="h-6 w-6 text-primary" />
+            AI Genereret Session Rapport
+          </CardTitle>
+          <CardDescription>
+            Generer en samlet rapport for alle gennemførte cyklusser i denne session.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
+          <div className="p-6 space-y-2">
+             <Button
+              onClick={onGenerateSessionReport}
+              disabled={isAnyAIProcessRunning || isGeneratingReport || sessionCycles.length === 0}
+              className="w-full sm:w-auto"
+            >
+              {isGeneratingReport ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <BarChartBig className="mr-2 h-4 w-4" />
+              )}
+              {isGeneratingReport ? "Genererer Rapport..." : "Generer Session Rapport (AI)"}
+            </Button>
           </div>
-        </ScrollArea>
-        
-        <CardFooter className="p-6 pt-4 border-t border-border flex flex-wrap gap-2 sm:gap-4 justify-start">
-          <Button 
-            variant="default" 
-            className="flex-1 sm:flex-none"
-            onClick={handleGenerateLatestCyclePdf}
-            disabled={sessionCycles.length === 0 || isAnyAIProcessRunning} 
-            aria-label="Download resultater fra seneste afsluttede cyklus som PDF"
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Download Seneste Cyklus (PDF)
-          </Button>
-          <Button 
-            variant="outline" 
-            className="flex-1 sm:flex-none"
-            onClick={handleGenerateAllCyclesPdf}
-            disabled={sessionCycles.length === 0 || isAnyAIProcessRunning} 
-            aria-label="Download resultater fra alle afsluttede cyklusser som PDF"
-          >
-            <FileText className="mr-2 h-4 w-4" />
-            Download Alle Cyklusser (PDF)
-          </Button>
-        </CardFooter>
-      </CardContent>
-    </Card>
+
+          {(sessionReport || isGeneratingReport) && (
+            <div className="flex-1 p-6 pt-0 flex flex-col overflow-hidden">
+              <Label htmlFor="sessionReportArea" className="mb-2 text-sm font-medium">
+                {isGeneratingReport && !sessionReport.startsWith("Genererer") ? "Genererer rapport..." : "Genereret Rapport (Markdown)"}
+              </Label>
+              <ScrollArea className="flex-1 border border-input rounded-md p-2 bg-muted/50">
+                {isGeneratingReport && sessionReport.startsWith("Genererer") ? (
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                ) : (
+                  <Textarea
+                    id="sessionReportArea"
+                    value={sessionReport}
+                    readOnly
+                    className="min-h-[300px] resize-none text-xs bg-muted/50 flex-1"
+                    placeholder="Rapporten vil blive vist her..."
+                  />
+                )}
+              </ScrollArea>
+            </div>
+          )}
+        </CardContent>
+         {(sessionReport && !isGeneratingReport && !sessionReport.startsWith("Fejl") && !sessionReport.startsWith("Kunne ikke") && !sessionReport.startsWith("Ingen cyklusdata")) && (
+          <CardFooter className="p-6 pt-4 border-t border-border">
+            <Button
+              onClick={onDownloadSessionReport}
+              disabled={isGeneratingReport}
+              variant="outline"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download Rapport (MD)
+            </Button>
+          </CardFooter>
+        )}
+      </Card>
+    </div>
   );
 }
 

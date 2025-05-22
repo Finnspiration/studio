@@ -155,7 +155,7 @@ Transskription/Input: {{{this.transcription}}}
 Resumé: {{{this.summary}}}
 Identificerede Temaer: {{{this.identifiedThemes}}}
 Whiteboard Indhold: {{{this.whiteboardContent}}}
-Genereret Billede Status/Prompt: {{{this.generatedImageDataUri}}} (Bemærk: Selve billeddataen er en lang streng, hvis det er en data URI; ellers en statusbesked)
+Genereret Billede Status/Prompt: {{{this.processedGeneratedImageStatus}}}
 Nye Indsigter: {{{this.newInsights}}}
 --- Slut Cyklus {{this.displayIndex}} Data ---
 {{/each}}
@@ -182,8 +182,10 @@ const generateSessionReportFlow = ai.defineFlow(
           imageStatusMsg = cycle.generatedImageDataUri;
         } else if (cycle.generatedImageDataUri.startsWith("Billedgenerering")) {
           imageStatusMsg = `Billedgenerering sprunget over eller fejlede: ${cycle.generatedImageDataUri}.`;
-        } else if (cycle.generatedImageDataUri.trim() !== "") {
+        } else if (cycle.generatedImageDataUri.trim() !== "" && !cycle.generatedImageDataUri.startsWith("Ugyldig KERNEL")) { // Added check for Ugyldig KERNEL
             imageStatusMsg = cycle.generatedImageDataUri; // If it's some other status message
+        } else if (cycle.generatedImageDataUri.startsWith("Ugyldig KERNEL")) {
+            imageStatusMsg = `Billedgenerering fejlede: ${cycle.generatedImageDataUri}`;
         }
       }
 
@@ -206,9 +208,9 @@ const generateSessionReportFlow = ai.defineFlow(
         return { reportText: "Kunne ikke generere sessionsrapport." };
       }
       return output;
-    } catch (error) {
-      console.error("GenerateSessionReportFlow: Fejl under prompt-kald", error);
-      return { reportText: "Fejl under generering af sessionsrapport." };
+    } catch (error: any) {
+      console.error("GenerateSessionReportFlow: Fejl under prompt-kald. Fejl:", error.message || error, "Input til prompt:", JSON.stringify(promptInput, null, 2));
+      return { reportText: `Fejl under generering af sessionsrapport: ${error.message || error}` };
     }
   }
 );

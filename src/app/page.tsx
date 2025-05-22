@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { AppHeader } from "@/components/app-header";
+import { InfoPanel } from "@/components/info-panel"; // Added import
 import { WhiteboardPanel } from "@/components/whiteboard-panel";
 import { ControlsPanel } from "@/components/controls-panel";
 import { ResultsPanel } from "@/components/results-panel";
@@ -91,14 +92,12 @@ export default function SynapseScribblePage() {
       toast({ title: "Max cyklusser nået", description: `Du kan maksimalt have ${MAX_CYCLES} analysecyklusser. Start en ny session for flere.`, variant: "default" });
       return false;
     }
-     // Keep transcription if it's from insights, otherwise it will be the recording placeholder or user text
     resetActiveCycleOutputs(isFromInsights ? false : true); 
     setActiveTranscription(transcription);
     return true;
   }
 
   const handleAudioTranscription = async (audioDataUri: string): Promise<Omit<CycleData, 'id' | 'whiteboardContent' | 'generatedImageDataUri' | 'newInsights'>> => {
-    // Initial placeholder text for transcription while recording
     if (!handleNewCycleStart("Optager lyd... Klik igen for at stoppe og starte AI-analyse.")) {
       setIsRecording(false); 
       return { transcription: FALLBACK_EMPTY_TRANSCRIPTION, summary: FALLBACK_EMPTY_SUMMARY, identifiedThemes: FALLBACK_EMPTY_THEMES };
@@ -119,7 +118,7 @@ export default function SynapseScribblePage() {
     } catch (error) {
       const userMessage = getAIUserErrorMessage(error, "Fejl ved transskription");
       toast({ title: "Fejl ved transskription", description: userMessage, variant: "destructive" });
-      transcriptionResultText = userMessage; // Use error message as transcription
+      transcriptionResultText = userMessage; 
       setActiveTranscription(transcriptionResultText); 
     } finally {
       setIsTranscribing(false);
@@ -145,7 +144,7 @@ export default function SynapseScribblePage() {
 
     if (transcriptionForAnalysis.startsWith("Fejl") || transcriptionForAnalysis === FALLBACK_EMPTY_TRANSCRIPTION || transcriptionForAnalysis.trim() === "" || transcriptionForAnalysis.startsWith("Optager lyd...")) {
       toast({ title: "Info", description: "Ugyldig transskription. Kan ikke opsummere/identificere temaer.", variant: "default" });
-      currentSummary = transcriptionForAnalysis; // Pass error/placeholder along
+      currentSummary = transcriptionForAnalysis; 
       currentThemes = "Temaanalyse sprunget over pga. ugyldig transskription.";
     } else {
       setIsProcessingSummaryAndThemes(true); 
@@ -159,7 +158,7 @@ export default function SynapseScribblePage() {
           currentThemes = "Temaanalyse sprunget over pga. fejl i opsummering.";
         } else {
           currentSummary = summaryResult.summary;
-          setActiveSummary(currentSummary); // Update active state immediately
+          setActiveSummary(currentSummary); 
           toast({ title: "Succes", description: "Transskription opsummeret." });
 
           const themesInput: IdentifyThemesInput = { textToAnalyze: currentSummary };
@@ -169,7 +168,7 @@ export default function SynapseScribblePage() {
             toast({ title: "Fejl ved temaanalyse", description: currentThemes, variant: "destructive" });
           } else {
             currentThemes = themesResult.identifiedThemesText;
-            setActiveIdentifiedThemes(currentThemes); // Update active state immediately
+            setActiveIdentifiedThemes(currentThemes); 
             toast({ title: "Succes", description: "Temaer identificeret." });
           }
         }
@@ -182,7 +181,7 @@ export default function SynapseScribblePage() {
         setIsProcessingSummaryAndThemes(false);
       }
     }
-    setActiveSummary(currentSummary); // Ensure active states are set even on failure path
+    setActiveSummary(currentSummary); 
     setActiveIdentifiedThemes(currentThemes);
     return await processGenerateWhiteboardIdeas(transcriptionForAnalysis, currentThemes, currentSummary);
   };
@@ -202,7 +201,7 @@ export default function SynapseScribblePage() {
           toast({ title: "Fejl ved idégenerering", description: currentWhiteboardContent, variant: "destructive" });
         } else {
           currentWhiteboardContent = result.refinedWhiteboardContent;
-          setActiveWhiteboardContent(currentWhiteboardContent); // Update active state
+          setActiveWhiteboardContent(currentWhiteboardContent); 
           toast({ title: "Succes", description: "Whiteboard-indhold opdateret." });
         }
       } catch (error) {
@@ -213,19 +212,18 @@ export default function SynapseScribblePage() {
         setIsGeneratingWhiteboard(false);
       }
     }
-    setActiveWhiteboardContent(currentWhiteboardContent); // Ensure active state is set
+    setActiveWhiteboardContent(currentWhiteboardContent); 
     
-    let imagePromptInput = FALLBACK_EMPTY_SUMMARY; 
-    if (summaryCtx && !summaryCtx.startsWith("Fejl") && summaryCtx !== FALLBACK_EMPTY_SUMMARY && summaryCtx.trim() !== "") {
-      imagePromptInput = summaryCtx;
-    }
+    let imagePromptForAI = FALLBACK_EMPTY_SUMMARY; 
     if (themesCtx && !themesCtx.startsWith("Fejl") && themesCtx !== FALLBACK_EMPTY_THEMES && !themesCtx.startsWith("Ingen specifikke temaer") && themesCtx.trim() !== "") {
-      imagePromptInput = themesCtx; 
+      imagePromptForAI = themesCtx; 
+    } else if (summaryCtx && !summaryCtx.startsWith("Fejl") && summaryCtx !== FALLBACK_EMPTY_SUMMARY && summaryCtx.trim() !== "") {
+      imagePromptForAI = summaryCtx;
     }
     
     const insightsContext = summaryCtx; 
 
-    return await processGenerateImage(transcriptionCtx, summaryCtx, themesCtx, currentWhiteboardContent, imagePromptInput, insightsContext);
+    return await processGenerateImage(transcriptionCtx, summaryCtx, themesCtx, currentWhiteboardContent, imagePromptForAI, insightsContext);
   };
   
   const processGenerateImage = async (
@@ -261,7 +259,7 @@ export default function SynapseScribblePage() {
           toast({ title: "Fejl ved billedgenerering", description: currentImageDataUri, variant: "destructive" });
         } else {
           currentImageDataUri = result.imageDataUri;
-          setActiveGeneratedImageDataUri(currentImageDataUri); // Update active state
+          setActiveGeneratedImageDataUri(currentImageDataUri); 
           toast({ title: "Succes", description: "Billede genereret." });
         }
       } catch (error) {
@@ -272,7 +270,7 @@ export default function SynapseScribblePage() {
         setIsGeneratingImage(false);
       }
     }
-    setActiveGeneratedImageDataUri(currentImageDataUri); // Ensure active state is set
+    setActiveGeneratedImageDataUri(currentImageDataUri); 
     return await processGenerateInsights(transcriptionForChain, summaryForChain, themesForChain, whiteboardContentForChain, currentImageDataUri, contextForInsights);
   };
 
@@ -299,7 +297,7 @@ export default function SynapseScribblePage() {
           toast({ title: "Fejl ved Indsigtsgenerering", description: currentNewInsights, variant: "destructive" });
         } else {
           currentNewInsights = result.insightsText;
-          setActiveNewInsights(currentNewInsights); // Update active state
+          setActiveNewInsights(currentNewInsights); 
           toast({ title: "Succes", description: "Nye AI-indsigter genereret." });
         }
       } catch (error) {
@@ -310,9 +308,8 @@ export default function SynapseScribblePage() {
         setIsGeneratingInsights(false);
       }
     }
-    setActiveNewInsights(currentNewInsights); // Ensure active state is set
+    setActiveNewInsights(currentNewInsights); 
     
-    // Now save the fully completed cycle with all data passed directly
     saveCompletedCycle({
       transcription,
       summary,
@@ -321,7 +318,7 @@ export default function SynapseScribblePage() {
       generatedImageDataUri: imageDataUri,
       newInsights: currentNewInsights,
     });
-    return { // This return is for consistency, but saveCompletedCycle now handles the data
+    return { 
         transcription,
         summary,
         identifiedThemes: themes,
@@ -345,14 +342,10 @@ export default function SynapseScribblePage() {
     setSessionCycles(prevCycles => {
       const updatedCycles = [...prevCycles, newCycle];
       if (updatedCycles.length < MAX_CYCLES) {
-        // Reset only those active states that pertain to the *next* cycle's AI generation
-        // Transcription is handled by handleNewCycleStart or user input
-        // Whiteboard and Image are shown from the last completed cycle or current active ones
         setActiveSummary(FALLBACK_EMPTY_SUMMARY);
         setActiveIdentifiedThemes(FALLBACK_EMPTY_THEMES);
         setActiveNewInsights(FALLBACK_EMPTY_INSIGHTS);
       } else {
-        // If max cycles reached, clear all active states for a "clean slate"
         resetActiveCycleOutputs(false); 
       }
       return updatedCycles;
@@ -360,7 +353,7 @@ export default function SynapseScribblePage() {
   };
 
   const handleUseInsightsForNewCycle = (insightsFromPreviousCycle: string) => {
-    if (!handleNewCycleStart(insightsFromPreviousCycle, true)) return; // isFromInsights = true
+    if (!handleNewCycleStart(insightsFromPreviousCycle, true)) return; 
     toast({ 
       title: "Ny Samtale Startet med Indsigter", 
       description: "Indsigter er indsat. Klik på 'Start AI Analyse med Tekst' for at behandle." 
@@ -368,7 +361,7 @@ export default function SynapseScribblePage() {
   };
   
   const handleResetSession = () => {
-    resetActiveCycleOutputs(true); // true to clear transcription as well
+    resetActiveCycleOutputs(true); 
     setSessionCycles([]);
     toast({ title: "Session Nulstillet", description: "Alle data er ryddet. Du kan starte forfra." });
   };
@@ -388,8 +381,6 @@ export default function SynapseScribblePage() {
   let wbContentToShow = activeWhiteboardContent;
   let imgUriToShow = activeGeneratedImageDataUri;
   
-  // Determine if the app is in a state of preparing a new cycle *via text input*
-  // This means transcription is set (and not a recording placeholder), but no AI processing has started for it yet
   const isPreparingNewCycleViaText = activeTranscription !== "" && 
                                      activeTranscription !== FALLBACK_EMPTY_TRANSCRIPTION &&
                                      !activeTranscription.startsWith("Optager lyd...") && 
@@ -399,10 +390,6 @@ export default function SynapseScribblePage() {
                                      activeGeneratedImageDataUri === FALLBACK_EMPTY_IMAGE &&
                                      activeNewInsights === FALLBACK_EMPTY_INSIGHTS;
   
-  // Logic to decide what to show in WhiteboardPanel
-  // If no AI is running for a *new* cycle AND it's not in the "preparing new text cycle" state,
-  // AND there are completed cycles, show the latest completed cycle's data in the whiteboard panel.
-  // Otherwise, show the active (potentially loading or freshly user-inputted) data.
   if (!isAnyAIProcessRunning && !isPreparingNewCycleViaText && sessionCycles.length > 0) {
     const lastCompletedCycle = sessionCycles[sessionCycles.length - 1];
     if (lastCompletedCycle) {
@@ -416,6 +403,7 @@ export default function SynapseScribblePage() {
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <AppHeader />
       <main className="flex-1 flex flex-col gap-4 p-4 container mx-auto">
+        <InfoPanel />
         <div className="flex flex-col gap-4">
           <ControlsPanel
             transcription={activeTranscription} 
@@ -433,8 +421,6 @@ export default function SynapseScribblePage() {
             whiteboardContent={wbContentToShow}
             setWhiteboardContent={setActiveWhiteboardContent} 
             generatedImageDataUri={imgUriToShow}
-            isGeneratingWhiteboard={isGeneratingWhiteboard && activeWhiteboardContent === FALLBACK_EMPTY_WHITEBOARD}
-            isGeneratingImage={isGeneratingImage && activeGeneratedImageDataUri === FALLBACK_EMPTY_IMAGE} 
             currentLoadingState={currentLoadingStateText()}
             fallbackEmptyWhiteboard={FALLBACK_EMPTY_WHITEBOARD}
             fallbackEmptyImage={FALLBACK_EMPTY_IMAGE}
@@ -457,9 +443,9 @@ export default function SynapseScribblePage() {
               summary: FALLBACK_EMPTY_SUMMARY,
               themes: FALLBACK_EMPTY_THEMES,
               insights: FALLBACK_EMPTY_INSIGHTS,
-              whiteboard: FALLBACK_EMPTY_WHITEBOARD, // Added to allow PDF to show fallbacks
-              image: FALLBACK_EMPTY_IMAGE,           // Added to allow PDF to show fallbacks
-              transcription: FALLBACK_EMPTY_TRANSCRIPTION // Added for PDF
+              whiteboard: FALLBACK_EMPTY_WHITEBOARD, 
+              image: FALLBACK_EMPTY_IMAGE,           
+              transcription: FALLBACK_EMPTY_TRANSCRIPTION 
             }}
           />
         </div>
@@ -467,5 +453,3 @@ export default function SynapseScribblePage() {
     </div>
   );
 }
-
-    

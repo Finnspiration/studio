@@ -198,7 +198,7 @@ export default function SynapseScribblePage() {
     setNewInsights("");
     let imageDataUriForInsights = "";
     try {
-      const styledPrompt = `En simpel whiteboard-tegning eller skitse der illustrerer: ${promptForImage}. Generer billedet i et widescreen 16:9 format. Brug primært sort tusch på hvid baggrund, eventuelt med få accentfarver i blå eller grøn. Stilen skal være minimalistisk og ligne noget, der hurtigt er tegnet på et whiteboard under et møde.`;
+      const styledPrompt = `En meget visuel whiteboard-tegning eller skitse der illustrerer: ${promptForImage}. Billedet skal være i et widescreen 16:9 format. Brug primært sort tusch på hvid baggrund, eventuelt med få accentfarver i blå eller grøn. Stilen skal være minimalistisk, ligne noget hurtigt tegnet på et whiteboard. Undgå meget tekst, fokuser på symboler, diagrammer eller simple illustrationer af koncepterne.`;
       const input: GenerateImageInput = { prompt: styledPrompt };
       const result = await generateImage(input);
       imageDataUriForInsights = result.imageDataUri;

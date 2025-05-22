@@ -23,7 +23,7 @@ interface ResultsPanelProps {
   onUseInsightsForNewCycle: (insights: string) => void;
   isAnyAIProcessRunning: boolean;
   canStartNewCycle: boolean;
-  fallbacks: { // Add fallbacks as props
+  fallbacks: { 
     summary: string;
     themes: string;
     insights: string;
@@ -49,8 +49,8 @@ export function ResultsPanel({
         (latestCompletedCycle.summary === fallbacks.summary && 
          latestCompletedCycle.identifiedThemes === fallbacks.themes &&
          latestCompletedCycle.newInsights === fallbacks.insights &&
-         latestCompletedCycle.whiteboardContent.startsWith("Whiteboard-indhold utilgængeligt") && // Simplified check for whiteboard
-         latestCompletedCycle.generatedImageDataUri.includes("fejlede")) // Simplified check for image
+         latestCompletedCycle.whiteboardContent === fallbacks.themes && // Adjusted for actual fallback
+         latestCompletedCycle.generatedImageDataUri === fallbacks.themes) // Adjusted for actual fallback
        ) {
         toast({title: "Info", description: "Ingen meningsfulde data i seneste afsluttede cyklus at generere PDF fra.", variant: "default"});
         return;
@@ -89,7 +89,7 @@ export function ResultsPanel({
         doc.text(title, margin, currentY);
         currentY += 7;
         doc.setFontSize(11);
-        if (content && content.trim() && !content.startsWith("Fejl") && !content.startsWith("Kunne ikke") && !content.startsWith("Ingen specifikke") && content !== fallbacks.summary && content !== fallbacks.themes && content !== fallbacks.insights && !content.startsWith("Whiteboard-indhold utilgængeligt")) {
+        if (content && content.trim() && !content.startsWith("Fejl") && !content.startsWith("Kunne ikke") && !content.startsWith("Ingen specifikke") && content !== fallbacks.summary && content !== fallbacks.themes && content !== fallbacks.insights && content !== fallbacks.themes) {
           const lines = doc.splitTextToSize(content, maxLineWidth);
           lines.forEach((line: string) => {
             if (currentY > pageHeight - margin - (isPreformatted ? 3 : 6)) { 
@@ -114,7 +114,7 @@ export function ResultsPanel({
       addSection("Whiteboard Indhold", dataToUse.whiteboardContent, true); 
       addSection("Nye AI Indsigter", dataToUse.newInsights);
 
-      if (dataToUse.generatedImageDataUri && !dataToUse.generatedImageDataUri.startsWith("Fejl") && !dataToUse.generatedImageDataUri.startsWith("Ugyldig prompt") && !dataToUse.generatedImageDataUri.includes("fejlede")) {
+      if (dataToUse.generatedImageDataUri && !dataToUse.generatedImageDataUri.startsWith("Fejl") && !dataToUse.generatedImageDataUri.startsWith("Ugyldig prompt") && dataToUse.generatedImageDataUri !== fallbacks.themes) {
         if (currentY + 80 > pageHeight - margin) { 
           doc.addPage();
           currentY = margin;
@@ -165,7 +165,7 @@ export function ResultsPanel({
         currentY += 7;
         doc.setFontSize(11);
         doc.setTextColor(150);
-        doc.text(dataToUse.generatedImageDataUri && (dataToUse.generatedImageDataUri.includes("Fejl") || dataToUse.generatedImageDataUri.includes("Ugyldig prompt") || dataToUse.generatedImageDataUri.includes("fejlede")) ? dataToUse.generatedImageDataUri : "Intet billede genereret eller tilgængeligt.", margin, currentY);
+        doc.text(dataToUse.generatedImageDataUri && (dataToUse.generatedImageDataUri.includes("Fejl") || dataToUse.generatedImageDataUri.includes("Ugyldig prompt") || dataToUse.generatedImageDataUri === fallbacks.themes) ? dataToUse.generatedImageDataUri : "Intet billede genereret eller tilgængeligt.", margin, currentY);
         doc.setTextColor(0);
         currentY += 10;
       }
@@ -180,9 +180,11 @@ export function ResultsPanel({
 
   const reversedCycles = [...sessionCycles].reverse();
   const isProcessingAnyActiveData = isLoadingActiveSummaryAndThemes || isLoadingActiveInsights;
+  const noActiveDataToShow = activeCycleData.summary === fallbacks.summary && activeCycleData.identifiedThemes === fallbacks.themes && activeCycleData.newInsights === fallbacks.insights;
+
 
   const ActiveCycleDisplay = () => (
-    <div className={`mb-8 p-4 border border-border rounded-lg shadow-sm bg-card ${(isAnyAIProcessRunning && !sessionCycles.find(c => c.summary === activeCycleData.summary && c.summary !== fallbacks.summary)) ? 'border-primary animate-pulse' : ''}`}>
+    <div className={`mb-8 p-4 border border-border rounded-lg shadow-sm bg-card ${isAnyAIProcessRunning ? 'border-primary animate-pulse' : ''}`}>
       <h3 className="text-xl font-semibold mb-3 text-primary">Igangværende Cyklus {sessionCycles.length + 1}</h3>
       <div>
         <h4 className="text-lg font-semibold mb-1 text-foreground">Resumé af Samtale</h4>
@@ -194,7 +196,7 @@ export function ResultsPanel({
           <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{activeCycleData.summary}</p>
         ) : (
           <p className="text-sm text-muted-foreground italic">
-            {activeCycleData.summary}
+            {activeCycleData.summary === fallbacks.summary && isAnyAIProcessRunning ? "Bearbejder..." : activeCycleData.summary}
           </p>
         )}
       </div>
@@ -213,7 +215,7 @@ export function ResultsPanel({
           </div>
         ) : (
           <p className="text-sm text-muted-foreground italic">
-            {activeCycleData.identifiedThemes}
+            {activeCycleData.identifiedThemes === fallbacks.themes && isAnyAIProcessRunning ? "Bearbejder..." : activeCycleData.identifiedThemes}
           </p>
         )}
       </div>
@@ -228,7 +230,7 @@ export function ResultsPanel({
           <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">{activeCycleData.newInsights}</p>
         ) : (
            <p className="text-sm text-muted-foreground italic">
-             {activeCycleData.newInsights}
+             {activeCycleData.newInsights === fallbacks.insights && isAnyAIProcessRunning ? "Bearbejder..." : activeCycleData.newInsights}
            </p>
         )}
       </div>
@@ -236,7 +238,7 @@ export function ResultsPanel({
   );
 
   return (
-    <Card className="shadow-lg flex-1 flex flex-col">
+    <Card className="shadow-lg flex-1 flex flex-col overflow-hidden">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Brain className="h-6 w-6 text-primary" /> 
@@ -247,9 +249,9 @@ export function ResultsPanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
-        <ScrollArea className="flex-1 max-h-[calc(100vh-500px)]"> 
-          <div className="space-y-0 p-6 pb-6">
-            {isAnyAIProcessRunning && (
+        <ScrollArea className="flex-1"> 
+          <div className="space-y-0 p-6 pb-0"> {/* Reduced bottom padding for content div */}
+            {(isAnyAIProcessRunning || !noActiveDataToShow) && (
               <ActiveCycleDisplay />
             )}
 
@@ -288,7 +290,7 @@ export function ResultsPanel({
                         onClick={() => onUseInsightsForNewCycle(cycle.newInsights)}
                         variant="outline"
                         className="w-full sm:w-auto mt-2"
-                        disabled={isAnyAIProcessRunning || !canStartNewCycle}
+                        disabled={isAnyAIProcessRunning || !canStartNewCycle || cycle.newInsights.startsWith("Ingen specifikke")}
                         aria-label={`Brug indsigter fra cyklus ${sessionCycles.length - index} til ny samtale`}
                       >
                         <MessageSquarePlus className="mr-2 h-4 w-4" />
@@ -300,13 +302,13 @@ export function ResultsPanel({
               </div>
             ))}
             
-            {sessionCycles.length === 0 && !isAnyAIProcessRunning && (
+            {sessionCycles.length === 0 && !isAnyAIProcessRunning && noActiveDataToShow && (
                 <p className="text-sm text-muted-foreground text-center py-10">Ingen analysecyklusser er kørt endnu. Start en analyse i kontrolpanelet.</p>
             )}
           </div>
         </ScrollArea>
         
-        <CardFooter className="p-6 pt-4 border-t border-border">
+        <CardFooter className="p-6 pt-4 border-t border-border"> {/* This is now outside ScrollArea */}
           <Button 
             variant="default" 
             className="w-full sm:w-auto"
@@ -322,3 +324,5 @@ export function ResultsPanel({
     </Card>
   );
 }
+
+    

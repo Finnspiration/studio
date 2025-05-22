@@ -13,8 +13,7 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const GenerateImageInputSchema = z.object({
-  prompt: z.string().describe('The text prompt to generate an image from.'),
-  style: z.string().optional().describe('Optional: The desired artistic style for the image (e.g., "photorealistic", "cartoon").'),
+  prompt: z.string().describe('The fully constructed text prompt to generate an image from, including style instructions.'),
 });
 export type GenerateImageInput = z.infer<typeof GenerateImageInputSchema>;
 
@@ -38,16 +37,16 @@ const generateImageFlow = ai.defineFlow(
     outputSchema: GenerateImageOutputSchema,
   },
   async (input) => {
-    if (!input.prompt || input.prompt.trim() === '' || input.prompt.startsWith("Fejl") || input.prompt.startsWith("Kunne ikke") || input.prompt.startsWith("Ingen specifikke")) {
-      console.warn(`GenerateImageFlow: Ugyldig KERNEL prompt for billedgenerering: "${input.prompt}". Stil prompt var: "${input.style}"`);
-      return { imageDataUri: "Ugyldig KERNEL prompt for billedgenerering. Kan ikke generere billede." };
+    if (!input.prompt || input.prompt.trim() === '' || input.prompt.startsWith("Fejl") || input.prompt.startsWith("Kunne ikke") || input.prompt.startsWith("Ingen specifikke") || input.prompt.startsWith("Ugyldig KERNEL prompt")) {
+      const errorMsg = `GenerateImageFlow: Ugyldig prompt for billedgenerering: "${input.prompt || 'Tom prompt'}". Kan ikke generere billede.`;
+      console.warn(errorMsg);
+      return { imageDataUri: errorMsg };
     }
-    const finalPrompt = input.style ? `${input.prompt}, in a ${input.style} style` : input.prompt;
-
+    
     try {
       const { media } = await ai.generate({
         model: 'googleai/gemini-2.0-flash-exp', 
-        prompt: finalPrompt, 
+        prompt: input.prompt, // Use the prompt directly
         config: {
           responseModalities: ['TEXT', 'IMAGE'], 
         },
@@ -57,6 +56,8 @@ const generateImageFlow = ai.defineFlow(
       if (Array.isArray(media) && media.length > 0) {
         imageUrl = media[0]?.url;
       } else if (media && typeof media === 'object' && 'url' in media) {
+        // This case might be for older models or different media types.
+        // Ensuring it's handled if 'media' is a single object with a 'url'.
         imageUrl = (media as { url: string }).url;
       }
       
@@ -72,9 +73,9 @@ const generateImageFlow = ai.defineFlow(
 
     } catch (error) {
       console.error("GenerateImageFlow: Fejl under ai.generate kald", error);
-      return { imageDataUri: "Fejl under billedgenerering." };
+      return { imageDataUri: `Fejl under billedgenerering: ${error instanceof Error ? error.message : String(error)}` };
     }
   }
 );
 
-  
+    

@@ -47,11 +47,20 @@ const summarizeTranscriptionFlow = ai.defineFlow(
     outputSchema: SummarizeTranscriptionOutputSchema,
   },
   async input => {
-    const {output} = await summarizeTranscriptionPrompt(input);
-    if (!output || typeof output.summary !== 'string' || output.summary.trim() === '') {
-      console.error("SummarizeTranscriptionFlow: Output fra prompt var ugyldigt eller manglede resumé.", output);
-      throw new Error("Kunne ikke generere et gyldigt resumé fra AI'en.");
+    if (!input.transcription || input.transcription.trim() === '') {
+      console.warn("SummarizeTranscriptionFlow: Ingen transskription at opsummere.");
+      return { summary: "Ingen transskription at opsummere." };
     }
-    return output;
+    try {
+      const {output} = await summarizeTranscriptionPrompt(input);
+      if (!output || typeof output.summary !== 'string' || output.summary.trim() === '') {
+        console.error("SummarizeTranscriptionFlow: Output fra prompt var ugyldigt eller manglede resumé.", output);
+        return { summary: "Kunne ikke generere et gyldigt resumé." };
+      }
+      return output;
+    } catch (error) {
+      console.error("SummarizeTranscriptionFlow: Fejl under prompt-kald", error);
+      return { summary: "Fejl under generering af resumé." };
+    }
   }
 );

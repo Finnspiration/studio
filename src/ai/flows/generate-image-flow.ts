@@ -21,7 +21,7 @@ const GenerateImageOutputSchema = z.object({
   imageDataUri: z
     .string()
     .describe(
-      "The generated image as a data URI. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+      "The generated image as a data URI. Expected format: 'data:<mimetype>;base64,<encoded_data>'. Or an error message if generation failed."
     ),
 });
 export type GenerateImageOutput = z.infer<typeof GenerateImageOutputSchema>;
@@ -37,36 +37,41 @@ const generateImageFlow = ai.defineFlow(
     outputSchema: GenerateImageOutputSchema,
   },
   async (input) => {
+    if (!input.prompt || input.prompt.trim() === '' || input.prompt.startsWith("Fejl") || input.prompt.startsWith("Kunne ikke") || input.prompt.startsWith("Ingen specifikke")) {
+      console.warn("GenerateImageFlow: Ugyldig prompt for billedgenerering.");
+      return { imageDataUri: "Ugyldig prompt for billedgenerering." };
+    }
     const styledPrompt = input.style ? `${input.prompt}, in a ${input.style} style` : input.prompt;
 
-    const { media } = await ai.generate({
-      model: 'googleai/gemini-2.0-flash-exp', // IMPORTANT: Specific model for image generation
-      prompt: styledPrompt, // Use the styled prompt
-      config: {
-        responseModalities: ['TEXT', 'IMAGE'], // MUST provide both
-      },
-    });
+    try {
+      const { media } = await ai.generate({
+        model: 'googleai/gemini-2.0-flash-exp', 
+        prompt: styledPrompt, 
+        config: {
+          responseModalities: ['TEXT', 'IMAGE'], 
+        },
+      });
 
-    // Gemini 2.0 Flash experimental can return an array of media items.
-    // We'll take the first one if it's an array.
-    let imageUrl: string | undefined;
-    if (Array.isArray(media) && media.length > 0) {
-      imageUrl = media[0]?.url;
-    } else if (media && typeof media === 'object' && 'url' in media) {
-      // Handle cases where media might be a single object (though array is typical for gemini-2.0-flash-exp image)
-      imageUrl = (media as { url: string }).url;
-    }
-    
-
-    if (!imageUrl) {
-      let errorDetails = "Image generation failed or did not return a valid image URL.";
-      if (media) {
-        errorDetails += ` Received media: ${JSON.stringify(media, null, 2)}`;
+      let imageUrl: string | undefined;
+      if (Array.isArray(media) && media.length > 0) {
+        imageUrl = media[0]?.url;
+      } else if (media && typeof media === 'object' && 'url' in media) {
+        imageUrl = (media as { url: string }).url;
       }
-      console.error("generateImageFlow error:", errorDetails);
-      throw new Error(errorDetails);
-    }
+      
+      if (!imageUrl) {
+        let errorDetails = "Billedgenerering fejlede eller returnerede ikke en gyldig billed-URL.";
+        if (media) {
+          errorDetails += ` Modtaget media: ${JSON.stringify(media, null, 2)}`;
+        }
+        console.error("generateImageFlow error:", errorDetails);
+        return { imageDataUri: errorDetails };
+      }
+      return { imageDataUri: imageUrl };
 
-    return { imageDataUri: imageUrl };
+    } catch (error) {
+      console.error("GenerateImageFlow: Fejl under ai.generate kald", error);
+      return { imageDataUri: "Fejl under billedgenerering." };
+    }
   }
 );

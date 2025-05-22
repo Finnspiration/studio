@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { AppHeader } from "@/components/app-header";
 import { WhiteboardPanel } from "@/components/whiteboard-panel";
 import { ControlsPanel } from "@/components/controls-panel";
@@ -27,25 +27,29 @@ export interface CycleData {
   summary: string;
   identifiedThemes: string;
   whiteboardContent: string;
-  generatedImageDataUri: string | null;
-  newInsights: string;
+  generatedImageDataUri: string; // Kan være fejlbesked
+  newInsights: string; // Kan være fejlbesked
 }
 
 const MAX_CYCLES = 2;
+const FALLBACK_ERROR_MESSAGE = "En uventet AI-fejl opstod.";
+const FALLBACK_EMPTY_SUMMARY = "Resumé utilgængeligt.";
+const FALLBACK_EMPTY_THEMES = "Temaer utilgængelige.";
+const FALLBACK_EMPTY_WHITEBOARD = "Whiteboard-indhold utilgængeligt.";
+const FALLBACK_EMPTY_IMAGE = "Billedgenerering fejlede eller intet billede returneret.";
+const FALLBACK_EMPTY_INSIGHTS = "Ingen specifikke nye indsigter kunne udledes.";
+
 
 export default function SynapseScribblePage() {
-  // State for den aktive/igangværende cyklus
   const [activeTranscription, setActiveTranscription] = useState<string>("");
   const [activeSummary, setActiveSummary] = useState<string>("");
   const [activeIdentifiedThemes, setActiveIdentifiedThemes] = useState<string>("");
   const [activeWhiteboardContent, setActiveWhiteboardContent] = useState<string>("");
-  const [activeGeneratedImageDataUri, setActiveGeneratedImageDataUri] = useState<string | null>(null);
+  const [activeGeneratedImageDataUri, setActiveGeneratedImageDataUri] = useState<string>("");
   const [activeNewInsights, setActiveNewInsights] = useState<string>("");
-
-  // State for alle afsluttede cyklusser
+  
   const [sessionCycles, setSessionCycles] = useState<CycleData[]>([]);
 
-  // Loading states for den aktive cyklus
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
   const [isProcessingSummaryAndThemes, setIsProcessingSummaryAndThemes] = useState<boolean>(false);
@@ -56,17 +60,16 @@ export default function SynapseScribblePage() {
   const { toast } = useToast();
 
   const resetActiveCycleOutputs = (keepTranscription = false) => {
-    if (!keepTranscription) {
-      setActiveTranscription("");
-    }
+    if (!keepTranscription) setActiveTranscription("");
     setActiveSummary("");
     setActiveIdentifiedThemes("");
     setActiveWhiteboardContent("");
-    setActiveGeneratedImageDataUri(null);
+    setActiveGeneratedImageDataUri("");
     setActiveNewInsights("");
   };
 
   const getAIUserErrorMessage = (error: unknown, baseMessage: string): string => {
+    let specificError = FALLBACK_ERROR_MESSAGE;
     if (error instanceof Error) {
       const errorMessageLowerCase = error.message.toLowerCase();
       if (error.message.includes("503") || 
@@ -74,19 +77,20 @@ export default function SynapseScribblePage() {
           errorMessageLowerCase.includes("overloaded") ||
           errorMessageLowerCase.includes("model is overloaded") ||
           errorMessageLowerCase.includes("model is not available")) {
-        return "AI-tjenesten (Google) er midlertidigt overbelastet eller utilgængelig. Prøv venligst igen om et øjeblik.";
+        specificError = "AI-tjenesten (Google) er midlertidigt overbelastet. Prøv igen senere.";
+      } else {
+        specificError = error.message;
       }
-      return `${baseMessage}: ${error.message}`;
     }
-    return `${baseMessage}: En ukendt fejl opstod.`;
+    return `${baseMessage}: ${specificError}`;
   };
 
-  const handleNewCycleStart = (transcription: string, isFromInsights = false) => {
+  const handleNewCycleStart = (transcription: string, isFromInsights = false): boolean => {
     if (!isFromInsights && sessionCycles.length >= MAX_CYCLES) {
-      toast({ title: "Max cyklusser nået", description: `Du kan maksimalt have ${MAX_CYCLES} analysecyklusser.`, variant: "default" });
+      toast({ title: "Max cyklusser nået", description: `Du kan maksimalt have ${MAX_CYCLES} analysecyklusser. Start en ny session for flere.`, variant: "default" });
       return false;
     }
-    resetActiveCycleOutputs(!isFromInsights); // Behold transskription hvis den kommer fra indsigter
+    resetActiveCycleOutputs(!isFromInsights);
     setActiveTranscription(transcription);
     return true;
   }
@@ -98,198 +102,205 @@ export default function SynapseScribblePage() {
     }
     
     setIsTranscribing(true);
-    // setActiveTranscription settes i handleNewCycleStart
-    
+    let transcriptionResultText = "";
     try {
       const input: TranscribeAudioInput = { audioDataUri };
       const result: TranscribeAudioOutput = await transcribeAudio(input);
-      setActiveTranscription(result.transcription); 
+      if (!result || !result.transcription || result.transcription.trim() === "" || result.transcription.startsWith("Fejl")) {
+        throw new Error(result?.transcription || "Transskription fejlede eller returnerede tomt resultat.");
+      }
+      transcriptionResultText = result.transcription;
+      setActiveTranscription(transcriptionResultText); 
       toast({ title: "Succes", description: "Automatisk transskription fuldført (simuleret)." });
-      await processSummaryAndThemes(result.transcription);
+      await processSummaryAndThemes(transcriptionResultText);
     } catch (error) {
-      console.error("Fejl under (simuleret) transskription:", error);
-      const userMessage = getAIUserErrorMessage(error, "Kunne ikke transskribere lyden (simuleret)");
+      const userMessage = getAIUserErrorMessage(error, "Fejl ved transskription");
       toast({ title: "Fejl ved transskription", description: userMessage, variant: "destructive" });
-      setActiveTranscription(""); 
+      setActiveTranscription(userMessage); 
+      transcriptionResultText = userMessage; // Sæt til fejlbesked for at stoppe kæden
+      saveCompletedCycle("", userMessage); // Gem en "fejlet" cyklus
     } finally {
       setIsTranscribing(false);
+      if (transcriptionResultText.startsWith("Fejl")) {
+        // Yderligere steps i kæden springes over hvis processSummaryAndThemes tjekker for fejl
+      }
     }
   };
-
+  
   const handleStartAnalysisFromText = async (currentTranscription: string) => {
     if (!currentTranscription.trim()) {
       toast({ title: "Info", description: "Transskription er tom. Kan ikke starte analyse.", variant: "default" });
       return;
     }
     if (!handleNewCycleStart(currentTranscription)) return;
-
     toast({ title: "AI Analyse Startet", description: "Behandler den angivne tekst..." });
     await processSummaryAndThemes(currentTranscription);
   };
 
   const processSummaryAndThemes = async (transcriptionForAnalysis: string) => {
-    if (!transcriptionForAnalysis.trim()) {
-      toast({ title: "Info", description: "Transskription er tom. Kan ikke opsummere eller identificere temaer.", variant: "default" });
+    if (!transcriptionForAnalysis || transcriptionForAnalysis.trim() === "" || transcriptionForAnalysis.startsWith("Fejl")) {
+      toast({ title: "Info", description: "Ugyldig transskription. Kan ikke opsummere/identificere temaer.", variant: "default" });
+      setActiveSummary(FALLBACK_EMPTY_SUMMARY);
+      setActiveIdentifiedThemes(FALLBACK_EMPTY_THEMES);
+      await processGenerateWhiteboardIdeas(transcriptionForAnalysis, FALLBACK_EMPTY_THEMES, FALLBACK_EMPTY_SUMMARY);
       return;
     }
+
     setIsProcessingSummaryAndThemes(true); 
-    setActiveSummary(""); 
-    setActiveIdentifiedThemes("");
-    
-    let summaryResultText = "";
-    let themesResultText = "Generelle temaer"; 
+    let summaryOutputText = FALLBACK_EMPTY_SUMMARY;
+    let themesOutputText = FALLBACK_EMPTY_THEMES;
 
     try {
       const summaryInput: SummarizeTranscriptionInput = { transcription: transcriptionForAnalysis };
       const summaryResult = await summarizeTranscription(summaryInput);
 
-      if (summaryResult && typeof summaryResult.summary === 'string' && summaryResult.summary.trim() !== "") {
-        summaryResultText = summaryResult.summary;
-        setActiveSummary(summaryResultText);
+      if (!summaryResult || !summaryResult.summary || summaryResult.summary.trim() === "" || summaryResult.summary.startsWith("Fejl") || summaryResult.summary.startsWith("Kunne ikke")) {
+        const errorMsg = summaryResult?.summary || "Ugyldigt resumé modtaget";
+        toast({ title: "Fejl ved opsummering", description: errorMsg, variant: "destructive" });
+        summaryOutputText = errorMsg;
+      } else {
+        summaryOutputText = summaryResult.summary;
         toast({ title: "Succes", description: "Transskription opsummeret." });
 
-        try {
-          const themesInput: IdentifyThemesInput = { textToAnalyze: summaryResult.summary };
-          const themesResult = await identifyThemes(themesInput);
-          if (themesResult && typeof themesResult.identifiedThemesText === 'string' && themesResult.identifiedThemesText.trim() !== "") {
-            themesResultText = themesResult.identifiedThemesText;
-            setActiveIdentifiedThemes(themesResultText);
-            toast({ title: "Succes", description: "Temaer identificeret." });
-          } else {
-            setActiveIdentifiedThemes(themesResultText); 
-            toast({ title: "Info", description: "Ingen specifikke temaer identificeret. Bruger generelle temaer.", variant: "default" });
-          }
-        } catch (themeError) {
-          setActiveIdentifiedThemes(themesResultText);
-          const userMessage = getAIUserErrorMessage(themeError, "Kunne ikke identificere temaer");
-          toast({ title: "Fejl ved temaanalyse", description: userMessage, variant: "destructive" });
+        // Fortsæt kun til temaer, hvis opsummering lykkedes
+        const themesInput: IdentifyThemesInput = { textToAnalyze: summaryOutputText };
+        const themesResult = await identifyThemes(themesInput);
+        if (!themesResult || !themesResult.identifiedThemesText || themesResult.identifiedThemesText.trim() === "" || themesResult.identifiedThemesText.startsWith("Fejl") || themesResult.identifiedThemesText.startsWith("Kunne ikke")) {
+          const themeErrorMsg = themesResult?.identifiedThemesText || "Ugyldige temaer modtaget";
+          toast({ title: "Fejl ved temaanalyse", description: themeErrorMsg, variant: "destructive" });
+          themesOutputText = themeErrorMsg;
+        } else {
+          themesOutputText = themesResult.identifiedThemesText;
+          toast({ title: "Succes", description: "Temaer identificeret." });
         }
-      } else {
-        summaryResultText = transcriptionForAnalysis; 
-        setActiveSummary(summaryResultText);
-        setActiveIdentifiedThemes(themesResultText);
-        toast({ title: "Fejl", description: "Intet gyldigt resumé modtaget. Bruger fuld transskription.", variant: "destructive" });
       }
-    } catch (summaryError) {
-      summaryResultText = transcriptionForAnalysis; 
-      setActiveSummary(summaryResultText);
-      setActiveIdentifiedThemes(themesResultText);
-      const userMessage = getAIUserErrorMessage(summaryError, "Kunne ikke opsummere transskription");
-      toast({ title: "Fejl ved opsummering", description: userMessage, variant: "destructive" });
+    } catch (error) {
+      const userMessage = getAIUserErrorMessage(error, "Fejl i opsummering/temaanalyse");
+      toast({ title: "Fejl", description: userMessage, variant: "destructive" });
+      summaryOutputText = userMessage; // Sæt fejlbesked
+      // themesOutputText forbliver fallback
     } finally {
+      setActiveSummary(summaryOutputText);
+      setActiveIdentifiedThemes(themesOutputText);
       setIsProcessingSummaryAndThemes(false);
-      await processGenerateWhiteboardIdeas(transcriptionForAnalysis, themesResultText, summaryResultText);
+      await processGenerateWhiteboardIdeas(transcriptionForAnalysis, themesOutputText, summaryOutputText);
     }
   };
   
-  const processGenerateWhiteboardIdeas = async (transcriptionContext: string, themesContext: string, summaryContext: string) => {
-    if (!transcriptionContext.trim()) {
-      toast({ title: "Fejl", description: "Transskription er tom for idégenerering.", variant: "destructive" });
-      await processGenerateImage(themesContext.trim() || summaryContext.substring(0,150).trim() || "abstrakt visualisering", summaryContext);
+  const processGenerateWhiteboardIdeas = async (transcriptionCtx: string, themesCtx: string, summaryCtx: string) => {
+    if (transcriptionCtx.startsWith("Fejl") || summaryCtx.startsWith("Fejl") || themesCtx.startsWith("Fejl")) {
+      toast({ title: "Info", description: "Forrige trin fejlede. Kan ikke generere whiteboard-idéer.", variant: "default" });
+      setActiveWhiteboardContent(FALLBACK_EMPTY_WHITEBOARD);
+      await processGenerateImage(FALLBACK_EMPTY_THEMES, summaryCtx); // Brug summaryCtx som fallback for billede-kontekst
       return;
     }
+
     setIsGeneratingWhiteboard(true);
-    setActiveWhiteboardContent("");
-    
+    let whiteboardOutputText = FALLBACK_EMPTY_WHITEBOARD;
     try {
-      const input: GenerateWhiteboardIdeasInput = {
-        transcription: transcriptionContext,
-        identifiedThemes: themesContext,
-        currentWhiteboardContent: "",
-      };
+      const input: GenerateWhiteboardIdeasInput = { transcription: transcriptionCtx, identifiedThemes: themesCtx };
       const result = await generateWhiteboardIdeas(input);
-      setActiveWhiteboardContent(result.refinedWhiteboardContent);
-      toast({ title: "Succes", description: "Whiteboard-indhold opdateret." });
+      if (!result || !result.refinedWhiteboardContent || result.refinedWhiteboardContent.trim() === "" || result.refinedWhiteboardContent.startsWith("Fejl") || result.refinedWhiteboardContent.startsWith("Kan ikke")) {
+        const errorMsg = result?.refinedWhiteboardContent || "Ugyldigt whiteboard-indhold modtaget";
+        toast({ title: "Fejl ved idégenerering", description: errorMsg, variant: "destructive" });
+        whiteboardOutputText = errorMsg;
+      } else {
+        whiteboardOutputText = result.refinedWhiteboardContent;
+        toast({ title: "Succes", description: "Whiteboard-indhold opdateret." });
+      }
     } catch (error) {
-      const userMessage = getAIUserErrorMessage(error, "Kunne ikke generere whiteboard-idéer");
-      toast({ title: "Fejl ved idégenerering", description: userMessage, variant: "destructive" });
+      const userMessage = getAIUserErrorMessage(error, "Fejl ved generering af whiteboard-idéer");
+      toast({ title: "Fejl", description: userMessage, variant: "destructive" });
+      whiteboardOutputText = userMessage;
     } finally {
+      setActiveWhiteboardContent(whiteboardOutputText);
       setIsGeneratingWhiteboard(false);
-      const imagePrompt = themesContext.trim() || summaryContext.substring(0,150).trim() || "abstrakt visualisering af diskussion";
-      await processGenerateImage(imagePrompt, summaryContext);
+      const imagePromptInput = themesCtx.startsWith("Fejl") || themesCtx.startsWith("Ingen specifikke") ? summaryCtx : themesCtx;
+      await processGenerateImage(imagePromptInput, summaryCtx); // summaryCtx for insight context
     }
   };
   
   const processGenerateImage = async (promptForImage: string, contextForInsights: string) => {
-    if (!promptForImage.trim()) {
-      toast({ title: "Info", description: "Ingen prompt til billedgenerering. Fortsætter uden billede.", variant: "default" });
-      await processGenerateInsights("", contextForInsights);
-      return;
+    if (promptForImage.startsWith("Fejl") || promptForImage.startsWith("Kunne ikke") || contextForInsights.startsWith("Fejl")) {
+       toast({ title: "Info", description: "Forrige trin fejlede. Kan ikke generere billede.", variant: "default" });
+       setActiveGeneratedImageDataUri(FALLBACK_EMPTY_IMAGE);
+       await processGenerateInsights(FALLBACK_EMPTY_IMAGE, contextForInsights);
+       return;
     }
     setIsGeneratingImage(true);
-    setActiveGeneratedImageDataUri(null); 
-    let imageDataUriForInsights = "";
+    let imageOutputDataUri = FALLBACK_EMPTY_IMAGE;
     try {
       const styledPrompt = `Omsæt følgende koncepter til en **metaforisk og visuel whiteboard-tegning eller skitse**: ${promptForImage}. Billedet skal være i widescreen 16:9 format og have en minimalistisk stil, som en hurtig whiteboard-tegning med primært sort tusch på hvid baggrund, eventuelt med få accentfarver (blå/grøn). Undgå meget tekst; fokuser på at bruge **symboler, metaforer, diagrammer eller simple abstrakte illustrationer** til at repræsentere koncepterne på en tankevækkende måde.`;
       const input: GenerateImageInput = { prompt: styledPrompt };
       const result = await generateImage(input);
-      imageDataUriForInsights = result.imageDataUri;
-      setActiveGeneratedImageDataUri(result.imageDataUri);
-      toast({ title: "Succes", description: "Billede genereret." });
+      if (!result || !result.imageDataUri || result.imageDataUri.trim() === "" || result.imageDataUri.startsWith("Fejl") || result.imageDataUri.startsWith("Ugyldig prompt")) {
+        const errorMsg = result?.imageDataUri || FALLBACK_EMPTY_IMAGE;
+        toast({ title: "Fejl ved billedgenerering", description: errorMsg, variant: "destructive" });
+        imageOutputDataUri = errorMsg;
+      } else {
+        imageOutputDataUri = result.imageDataUri;
+        toast({ title: "Succes", description: "Billede genereret." });
+      }
     } catch (error) {
-      const userMessage = getAIUserErrorMessage(error, "Kunne ikke generere billede");
-      toast({ title: "Fejl ved billedgenerering", description: userMessage, variant: "destructive" });
+      const userMessage = getAIUserErrorMessage(error, "Fejl ved billedgenerering");
+      toast({ title: "Fejl", description: userMessage, variant: "destructive" });
+      imageOutputDataUri = userMessage;
     } finally {
+      setActiveGeneratedImageDataUri(imageOutputDataUri);
       setIsGeneratingImage(false);
-      await processGenerateInsights(imageDataUriForInsights, contextForInsights);
+      await processGenerateInsights(imageOutputDataUri, contextForInsights);
     }
   };
 
   const processGenerateInsights = async (imageDataUri: string, conversationContext: string) => {
-    if (!conversationContext.trim()) { 
-      toast({ title: "Info", description: "Manglende samtalekontekst. Kan ikke generere indsigter.", variant: "default" });
-      saveCompletedCycle(imageDataUri || "", "Ingen indsigter genereret pga. manglende kontekst.");
-      return;
+     if (imageDataUri.startsWith("Fejl") || imageDataUri.startsWith("Ugyldig prompt") || conversationContext.startsWith("Fejl")) {
+       toast({ title: "Info", description: "Forrige trin fejlede. Kan ikke generere indsigter.", variant: "default" });
+       setActiveNewInsights(FALLBACK_EMPTY_INSIGHTS);
+       saveCompletedCycle(imageDataUri, FALLBACK_EMPTY_INSIGHTS);
+       return;
     }
     setIsGeneratingInsights(true);
-    setActiveNewInsights(""); 
-    let insightsText = "Ingen indsigter genereret.";
+    let insightsOutputText = FALLBACK_EMPTY_INSIGHTS;
     try {
-      const input: GenerateInsightsInput = { 
-        imageDataUri: imageDataUri || "",
-        conversationContext 
-      };
+      const input: GenerateInsightsInput = { imageDataUri, conversationContext };
       const result = await generateInsights(input);
-      insightsText = result.insightsText;
-      setActiveNewInsights(insightsText);
-      toast({ title: "Succes", description: "Nye AI-indsigter genereret." });
+       if (!result || !result.insightsText || result.insightsText.trim() === "" || result.insightsText.startsWith("Fejl") || result.insightsText.startsWith("Kunne ikke")) {
+        const errorMsg = result?.insightsText || FALLBACK_EMPTY_INSIGHTS;
+        toast({ title: "Fejl ved Indsigtsgenerering", description: errorMsg, variant: "destructive" });
+        insightsOutputText = errorMsg;
+      } else {
+        insightsOutputText = result.insightsText;
+        toast({ title: "Succes", description: "Nye AI-indsigter genereret." });
+      }
     } catch (error) {
-      const userMessage = getAIUserErrorMessage(error, "Kunne ikke generere nye indsigter");
-      toast({ title: "Fejl ved Indsigtsgenerering", description: userMessage, variant: "destructive" });
+      const userMessage = getAIUserErrorMessage(error, "Fejl ved generering af nye indsigter");
+      toast({ title: "Fejl", description: userMessage, variant: "destructive" });
+      insightsOutputText = userMessage;
     } finally {
+      setActiveNewInsights(insightsOutputText);
       setIsGeneratingInsights(false);
-      saveCompletedCycle(imageDataUri || "", insightsText);
+      saveCompletedCycle(imageDataUri, insightsOutputText);
     }
   };
 
   const saveCompletedCycle = (finalImageDataUri: string, finalInsightsText: string) => {
     const newCycle: CycleData = {
-      id: `${Date.now()}-${Math.random()}`, // Simpel unik ID
-      transcription: activeTranscription,
-      summary: activeSummary,
-      identifiedThemes: activeIdentifiedThemes,
-      whiteboardContent: activeWhiteboardContent,
-      generatedImageDataUri: finalImageDataUri,
-      newInsights: finalInsightsText,
+      id: `${Date.now()}-${Math.random()}`,
+      transcription: activeTranscription || "Transskription utilgængelig",
+      summary: activeSummary || FALLBACK_EMPTY_SUMMARY,
+      identifiedThemes: activeIdentifiedThemes || FALLBACK_EMPTY_THEMES,
+      whiteboardContent: activeWhiteboardContent || FALLBACK_EMPTY_WHITEBOARD,
+      generatedImageDataUri: finalImageDataUri || FALLBACK_EMPTY_IMAGE,
+      newInsights: finalInsightsText || FALLBACK_EMPTY_INSIGHTS,
     };
-    setSessionCycles(prevCycles => {
-        const updatedCycles = [...prevCycles, newCycle];
-        // Nulstil kun aktive states her, efter cyklus er gemt, hvis det er sidste cyklus
-        if (updatedCycles.length >= MAX_CYCLES) {
-            // Gør klar til at vise "Max cyklusser nået" ved at rydde aktiv transskription
-            // medmindre vi er i et "Brug Indsigter" flow.
-            // Dette håndteres bedre af canStartNewCycle i ControlsPanel.
-        }
-        return updatedCycles;
-    });
+    setSessionCycles(prevCycles => [...prevCycles, newCycle]);
   };
 
   const handleUseInsightsForNewCycle = (insightsFromPreviousCycle: string) => {
-    if (!handleNewCycleStart(insightsFromPreviousCycle, true)) return; // true for isFromInsights
-
+    if (!handleNewCycleStart(insightsFromPreviousCycle, true)) return;
     toast({ 
       title: "Ny Samtale Startet med Indsigter", 
-      description: "Indsigter er indsat. Klik på 'Start AI Analyse med Tekst' i kontrolpanelet for at behandle." 
+      description: "Indsigter er indsat. Klik på 'Start AI Analyse med Tekst' for at behandle." 
     });
   };
   
@@ -305,8 +316,6 @@ export default function SynapseScribblePage() {
 
   const isAnyAIProcessRunning = isTranscribing || isProcessingSummaryAndThemes || isGeneratingWhiteboard || isGeneratingImage || isGeneratingInsights;
   
-  // Data for whiteboard og billede skal være den seneste *afsluttede* cyklus,
-  // ELLER den *aktive* hvis en proces kører.
   let wbContentToShow = activeWhiteboardContent;
   let imgUriToShow = activeGeneratedImageDataUri;
 
@@ -315,7 +324,6 @@ export default function SynapseScribblePage() {
     wbContentToShow = lastCompletedCycle.whiteboardContent;
     imgUriToShow = lastCompletedCycle.generatedImageDataUri;
   }
-
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -340,7 +348,7 @@ export default function SynapseScribblePage() {
               whiteboardContent={wbContentToShow}
               setWhiteboardContent={setActiveWhiteboardContent} 
               generatedImageDataUri={imgUriToShow}
-              isGeneratingImage={isGeneratingImage && !activeGeneratedImageDataUri}
+              isGeneratingImage={isGeneratingImage && !activeGeneratedImageDataUri} // Vis kun loader hvis vi aktivt genererer og endnu ikke har et billede
               currentLoadingState={currentLoadingStateText()}
             />
           </div>
@@ -353,8 +361,8 @@ export default function SynapseScribblePage() {
               identifiedThemes: activeIdentifiedThemes,
               newInsights: activeNewInsights,
             }}
-            isLoadingActiveSummaryAndThemes={isProcessingSummaryAndThemes && (!activeSummary || !activeIdentifiedThemes)}
-            isLoadingActiveInsights={isGeneratingInsights && !activeNewInsights}
+            isLoadingActiveSummaryAndThemes={isProcessingSummaryAndThemes}
+            isLoadingActiveInsights={isGeneratingInsights}
             onUseInsightsForNewCycle={handleUseInsightsForNewCycle}
             isAnyAIProcessRunning={isAnyAIProcessRunning || isRecording}
             canStartNewCycle={sessionCycles.length < MAX_CYCLES}
@@ -364,5 +372,3 @@ export default function SynapseScribblePage() {
     </div>
   );
 }
-
-    

@@ -30,6 +30,7 @@ const prompt = ai.definePrompt({
   output: {schema: IdentifyThemesOutputSchema},
   prompt: `Analyser følgende tekst og identificer 3-5 centrale temaer, nøglekoncepter eller gennemgående idéer.
 Formuler temaerne som en kommasepareret liste af korte, præcise fraser. Svar på dansk.
+Hvis teksten er for kort eller intetsigende til at udlede temaer, svar da med "Ingen specifikke temaer kunne udledes."
 
 Tekst til analyse:
 {{{textToAnalyze}}}
@@ -44,15 +45,20 @@ const identifyThemesFlow = ai.defineFlow(
     outputSchema: IdentifyThemesOutputSchema,
   },
   async (input) => {
-    if (!input.textToAnalyze || input.textToAnalyze.trim() === '') {
-      console.warn("identifyThemesFlow: Ingen tekst at analysere. Returnerer tomme temaer.");
-      return { identifiedThemesText: "Ingen temaer kunne identificeres fra den tomme tekst." };
+    if (!input.textToAnalyze || input.textToAnalyze.trim() === '' || input.textToAnalyze.includes("Kunne ikke generere et gyldigt resumé") || input.textToAnalyze.includes("Ingen transskription at opsummere")) {
+      console.warn("identifyThemesFlow: Ingen gyldig tekst at analysere. Returnerer standardtemaer.");
+      return { identifiedThemesText: "Ingen specifikke temaer kunne udledes fra den angivne tekst." };
     }
-    const {output} = await prompt(input);
-    if (!output || typeof output.identifiedThemesText !== 'string' || output.identifiedThemesText.trim() === '') {
-      console.error("identifyThemesFlow: Output fra prompt var ugyldigt eller manglede identificerede temaer.", output);
-      throw new Error("Kunne ikke identificere temaer fra AI'en.");
+    try {
+      const {output} = await prompt(input);
+      if (!output || typeof output.identifiedThemesText !== 'string' || output.identifiedThemesText.trim() === '') {
+        console.error("identifyThemesFlow: Output fra prompt var ugyldigt eller manglede identificerede temaer.", output);
+        return { identifiedThemesText: "Kunne ikke identificere temaer." };
+      }
+      return output;
+    } catch (error) {
+      console.error("identifyThemesFlow: Fejl under prompt-kald", error);
+      return { identifiedThemesText: "Fejl under identifikation af temaer." };
     }
-    return output;
   }
 );

@@ -13,7 +13,7 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const GenerateWhiteboardIdeasInputSchema = z.object({
-  transcription: z // Ændret fra voicePrompt
+  transcription: z 
     .string()
     .describe('Den fulde transskription af samtalen.'),
   identifiedThemes: z
@@ -66,9 +66,24 @@ const generateWhiteboardIdeasFlow = ai.defineFlow(
     outputSchema: GenerateWhiteboardIdeasOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
-    return output!;
+    if (!input.transcription || input.transcription.trim() === '' || input.transcription.startsWith("Fejl") || input.transcription.startsWith("Kunne ikke")) {
+      console.warn("GenerateWhiteboardIdeasFlow: Ugyldig transskription for idégenerering.");
+      return { refinedWhiteboardContent: "Kan ikke generere whiteboard-idéer uden gyldig transskription." };
+    }
+     if (!input.identifiedThemes || input.identifiedThemes.trim() === '' || input.identifiedThemes.startsWith("Fejl") || input.identifiedThemes.startsWith("Kunne ikke") || input.identifiedThemes.startsWith("Ingen specifikke temaer")) {
+      console.warn("GenerateWhiteboardIdeasFlow: Ugyldige temaer for idégenerering. Bruger kun transskription.");
+      // Overvej at have en prompt-variant der kun bruger transskription, eller gør identifiedThemes helt valgfri i prompten
+    }
+    try {
+      const {output} = await prompt(input);
+      if (!output || typeof output.refinedWhiteboardContent !== 'string' || output.refinedWhiteboardContent.trim() === "") {
+        console.error("GenerateWhiteboardIdeasFlow: Output fra prompt var ugyldigt eller manglede indhold.", output);
+        return { refinedWhiteboardContent: "Kunne ikke generere whiteboard-indhold." };
+      }
+      return output;
+    } catch (error) {
+      console.error("GenerateWhiteboardIdeasFlow: Fejl under prompt-kald", error);
+      return { refinedWhiteboardContent: "Fejl under generering af whiteboard-idéer." };
+    }
   }
 );
-
-    

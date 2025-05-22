@@ -198,7 +198,7 @@ export default function SynapseScribblePage() {
     setNewInsights("");
     let imageDataUriForInsights = "";
     try {
-      const styledPrompt = `En meget visuel whiteboard-tegning eller skitse der illustrerer: ${promptForImage}. Billedet skal være i et widescreen 16:9 format. Brug primært sort tusch på hvid baggrund, eventuelt med få accentfarver i blå eller grøn. Stilen skal være minimalistisk, ligne noget hurtigt tegnet på et whiteboard. Undgå meget tekst, fokuser på symboler, diagrammer eller simple illustrationer af koncepterne.`;
+      const styledPrompt = `Illustrer følgende koncepter som en meget visuel whiteboard-tegning eller skitse: ${promptForImage}. Billedet skal være i widescreen 16:9 format. Stilen skal være minimalistisk, som en hurtig whiteboard-tegning med primært sort tusch på hvid baggrund, eventuelt med få accentfarver i blå eller grøn. Fokuser på at bruge symboler, diagrammer eller simple illustrationer til at repræsentere koncepterne, og undgå meget tekst.`;
       const input: GenerateImageInput = { prompt: styledPrompt };
       const result = await generateImage(input);
       imageDataUriForInsights = result.imageDataUri;
@@ -249,6 +249,7 @@ export default function SynapseScribblePage() {
 
   const handleUseInsights = (insights: string) => {
     setTranscription(insights); 
+    // resetAIOutputs(); // Fjernet for at beholde indsigterne synlige
     toast({ 
       title: "Ny Samtale Startet", 
       description: "Indsigter er indsat. Klik på 'Start AI Analyse med Tekst' for at behandle." 

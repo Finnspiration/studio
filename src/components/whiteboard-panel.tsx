@@ -1,7 +1,6 @@
 
 "use client";
 
-import type { Dispatch, SetStateAction } from 'react';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,23 +10,23 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 interface WhiteboardPanelProps {
   whiteboardContent: string;
-  setWhiteboardContent: Dispatch<SetStateAction<string>>;
   generatedImageDataUri: string;
-  currentLoadingState: string | null;
+  isGeneratingWhiteboard: boolean;
+  isGeneratingImage: boolean;
+  currentLoadingState: string | null; // To show specific loading text
   fallbackEmptyWhiteboard: string;
   fallbackEmptyImage: string;
 }
 
 export function WhiteboardPanel({
   whiteboardContent,
-  setWhiteboardContent,
   generatedImageDataUri,
+  isGeneratingWhiteboard,
+  isGeneratingImage,
   currentLoadingState,
   fallbackEmptyWhiteboard,
   fallbackEmptyImage,
 }: WhiteboardPanelProps) {
-  const isGeneratingActiveWhiteboard = !!currentLoadingState && currentLoadingState.includes("Genererer whiteboard-idéer");
-  const isGeneratingActiveImage = !!currentLoadingState && currentLoadingState.includes("Genererer billede");
   
   return (
     <Card className="flex-1 flex flex-col shadow-lg">
@@ -36,7 +35,7 @@ export function WhiteboardPanel({
           <Palette className="h-6 w-6 text-primary" />
           Whiteboard
         </CardTitle>
-        {currentLoadingState && (isGeneratingActiveWhiteboard || isGeneratingActiveImage) && (
+        {currentLoadingState && (isGeneratingWhiteboard || isGeneratingImage) && (
           <CardDescription className="flex items-center text-sm pt-1 text-primary">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             {currentLoadingState}
@@ -47,7 +46,7 @@ export function WhiteboardPanel({
         <div className="flex-1 flex flex-col overflow-y-auto p-6 space-y-6">
           <div className="flex flex-col flex-1 min-h-[120px]">
             <Label htmlFor="whiteboard" className="mb-2 text-sm font-medium">Whiteboard Indhold (AI genereret, kan redigeres)</Label>
-            {isGeneratingActiveWhiteboard && whiteboardContent === fallbackEmptyWhiteboard ? (
+            {isGeneratingWhiteboard && whiteboardContent === fallbackEmptyWhiteboard ? (
               <div className="flex-1 space-y-2 mt-1">
                 <Skeleton className="h-6 w-3/4" />
                 <Skeleton className="h-6 w-full" />
@@ -57,21 +56,15 @@ export function WhiteboardPanel({
               <Textarea
                 id="whiteboard"
                 placeholder={
-                  whiteboardContent === fallbackEmptyWhiteboard && !isGeneratingActiveWhiteboard 
+                  whiteboardContent === fallbackEmptyWhiteboard && !isGeneratingWhiteboard
                     ? "Whiteboard-indhold genereres automatisk af AI..." 
-                    : whiteboardContent.startsWith("Genererer whiteboard-idéer...")
-                    ? "Genererer whiteboard-idéer..."
-                    : whiteboardContent
+                    : whiteboardContent // Show actual content or AI-generated error/empty message
                 }
-                value={
-                  (whiteboardContent === fallbackEmptyWhiteboard || whiteboardContent.startsWith("Genererer whiteboard-idéer...")) && !isGeneratingActiveWhiteboard
-                    ? ""
-                    : whiteboardContent
-                }
-                onChange={(e) => setWhiteboardContent(e.target.value)}
+                value={whiteboardContent === fallbackEmptyWhiteboard ? "" : whiteboardContent}
+                // onChange prop removed as setWhiteboardContent is no longer passed
                 className="flex-1 resize-none text-base bg-card min-h-[120px]"
                 aria-label="Whiteboard indholdsområde"
-                disabled={isGeneratingActiveWhiteboard || isGeneratingActiveImage}
+                disabled={isGeneratingWhiteboard || isGeneratingImage} 
               />
             )}
           </div>
@@ -79,7 +72,7 @@ export function WhiteboardPanel({
           <div className="flex-shrink-0">
             <Label className="mb-2 text-sm font-medium">AI Genereret Billede</Label>
             <div className="w-full aspect-video bg-muted rounded-md flex items-center justify-center overflow-hidden border border-border relative">
-              {isGeneratingActiveImage ? (
+              {isGeneratingImage ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80">
                   <Loader2 className="h-10 w-10 text-primary animate-spin mb-2" />
                   <p className="text-sm text-foreground">Genererer billede...</p>
@@ -110,3 +103,4 @@ export function WhiteboardPanel({
     </Card>
   );
 }
+

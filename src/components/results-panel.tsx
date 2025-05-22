@@ -179,8 +179,12 @@ export function ResultsPanel({
   };
 
   const reversedCycles = [...sessionCycles].reverse();
-  const isProcessingAnyActiveData = isLoadingActiveSummaryAndThemes || isLoadingActiveInsights;
-  const noActiveDataToShow = activeCycleData.summary === fallbacks.summary && activeCycleData.identifiedThemes === fallbacks.themes && activeCycleData.newInsights === fallbacks.insights;
+  
+  const isDisplayingActiveData = 
+    isAnyAIProcessRunning || // If any AI process is running for the active cycle
+    (activeCycleData.summary !== fallbacks.summary || 
+     activeCycleData.identifiedThemes !== fallbacks.themes || 
+     activeCycleData.newInsights !== fallbacks.insights); // Or if active data is not just fallbacks
 
 
   const ActiveCycleDisplay = () => (
@@ -250,8 +254,8 @@ export function ResultsPanel({
       </CardHeader>
       <CardContent className="flex-1 flex flex-col overflow-hidden p-0">
         <ScrollArea className="flex-1"> 
-          <div className="space-y-0 p-6 pb-0"> {/* Reduced bottom padding for content div */}
-            {(isAnyAIProcessRunning || !noActiveDataToShow) && (
+          <div className="space-y-0 p-6 pb-6">
+            {isDisplayingActiveData && (
               <ActiveCycleDisplay />
             )}
 
@@ -261,7 +265,7 @@ export function ResultsPanel({
                 <div>
                   <h4 className="text-lg font-semibold mb-1 text-foreground">Resumé af Samtale</h4>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
-                    {cycle.summary}
+                    {(cycle.summary && cycle.summary !== fallbacks.summary) ? cycle.summary : <span className="italic">{fallbacks.summary}</span>}
                   </p>
                 </div>
                 <Separator className="my-3" />
@@ -276,21 +280,21 @@ export function ResultsPanel({
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground italic">{cycle.identifiedThemes}</p>
+                    <p className="text-sm text-muted-foreground italic">{cycle.identifiedThemes === fallbacks.themes ? fallbacks.themes : cycle.identifiedThemes}</p>
                   )}
                 </div>
                 <Separator className="my-3" />
                 <div>
                   <h4 className="text-lg font-semibold mb-1 text-foreground">Nye AI Indsigter</h4>
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
-                    {cycle.newInsights}
+                     {(cycle.newInsights && cycle.newInsights !== fallbacks.insights) ? cycle.newInsights : <span className="italic">{fallbacks.insights}</span>}
                   </p>
                   {(cycle.newInsights && cycle.newInsights !== fallbacks.insights && !cycle.newInsights.startsWith("Fejl") && !cycle.newInsights.startsWith("Kunne ikke") && !cycle.newInsights.startsWith("Ingen specifikke")) && (
                      <Button
                         onClick={() => onUseInsightsForNewCycle(cycle.newInsights)}
                         variant="outline"
                         className="w-full sm:w-auto mt-2"
-                        disabled={isAnyAIProcessRunning || !canStartNewCycle || cycle.newInsights.startsWith("Ingen specifikke")}
+                        disabled={isAnyAIProcessRunning || !canStartNewCycle}
                         aria-label={`Brug indsigter fra cyklus ${sessionCycles.length - index} til ny samtale`}
                       >
                         <MessageSquarePlus className="mr-2 h-4 w-4" />
@@ -298,22 +302,22 @@ export function ResultsPanel({
                       </Button>
                   )}
                 </div>
-                 {index < reversedCycles.length -1 && !(isAnyAIProcessRunning && index === 0 && reversedCycles.length > 1) && <Separator className="my-6 border-dashed" />}
+                 {index < reversedCycles.length -1 && !(isDisplayingActiveData && index === 0 && reversedCycles.length > 1) && <Separator className="my-6 border-dashed" />}
               </div>
             ))}
             
-            {sessionCycles.length === 0 && !isAnyAIProcessRunning && noActiveDataToShow && (
+            {sessionCycles.length === 0 && !isDisplayingActiveData && (
                 <p className="text-sm text-muted-foreground text-center py-10">Ingen analysecyklusser er kørt endnu. Start en analyse i kontrolpanelet.</p>
             )}
           </div>
         </ScrollArea>
         
-        <CardFooter className="p-6 pt-4 border-t border-border"> {/* This is now outside ScrollArea */}
+        <CardFooter className="p-6 pt-4 border-t border-border">
           <Button 
             variant="default" 
             className="w-full sm:w-auto"
             onClick={handleGeneratePdf}
-            disabled={sessionCycles.length === 0 || (isAnyAIProcessRunning && !sessionCycles.find(c => c.summary !== fallbacks.summary))} 
+            disabled={sessionCycles.length === 0 || (isAnyAIProcessRunning && !sessionCycles.some(c => c.summary !== fallbacks.summary || c.identifiedThemes !== fallbacks.themes))} 
             aria-label="Download resultater fra seneste afsluttede cyklus som PDF"
           >
             <Download className="mr-2 h-4 w-4" />
@@ -325,4 +329,3 @@ export function ResultsPanel({
   );
 }
 
-    

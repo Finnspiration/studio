@@ -7,8 +7,11 @@ import { WhiteboardPanel } from "@/components/whiteboard-panel";
 import { ControlsPanel } from "@/components/controls-panel";
 import { ResultsPanel } from "@/components/results-panel";
 import { useToast } from "@/hooks/use-toast";
+
 import { summarizeTranscription } from '@/ai/flows/summarize-transcription';
-import type { SummarizeTranscriptionInput } from '@/ai/flows/summarize-transcription';
+import type { SummarizeTranscriptionInput, SummarizeTranscriptionOutput } from '@/ai/flows/summarize-transcription';
+import { identifyThemes } from '@/ai/flows/identify-themes-flow';
+import type { IdentifyThemesInput, IdentifyThemesOutput } from '@/ai/flows/identify-themes-flow';
 import { generateWhiteboardIdeas } from '@/ai/flows/generate-whiteboard-ideas';
 import type { GenerateWhiteboardIdeasInput } from '@/ai/flows/generate-whiteboard-ideas';
 import { generateImage } from '@/ai/flows/generate-image-flow';
@@ -27,7 +30,7 @@ export default function SynapseScribblePage() {
   
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
-  const [isSummarizing, setIsSummarizing] = useState<boolean>(false);
+  const [isSummarizing, setIsSummarizing] = useState<boolean>(false); // Covers summarization and theme identification
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState<boolean>(false);
   
   const [generatedImageDataUri, setGeneratedImageDataUri] = useState<string | null>(null);
@@ -70,7 +73,7 @@ export default function SynapseScribblePage() {
       const result: TranscribeAudioOutput = await transcribeAudio(input);
       setTranscription(result.transcription); 
       toast({ title: "Succes", description: "Automatisk transskription fuldført (simuleret)." });
-      await handleSummarize(result.transcription);
+      await handleSummarizeAndIdentifyThemes(result.transcription);
     } catch (error) {
       console.error("Fejl under (simuleret) transskription:", error);
       const userMessage = getAIUserErrorMessage(error, "Kunne ikke transskribere lyden (simuleret)");
@@ -89,99 +92,104 @@ export default function SynapseScribblePage() {
     resetAIOutputs(); 
     setTranscription(currentTranscription); 
     toast({ title: "AI Analyse Startet", description: "Behandler den angivne tekst..." });
-    await handleSummarize(currentTranscription);
+    await handleSummarizeAndIdentifyThemes(currentTranscription);
   };
 
-  const handleSummarize = async (currentTranscription: string) => {
+  const handleSummarizeAndIdentifyThemes = async (currentTranscription: string) => {
     if (!currentTranscription.trim()) {
-      toast({ title: "Info", description: "Transskription er tom. Kan ikke opsummere.", variant: "default" });
+      toast({ title: "Info", description: "Transskription er tom. Kan ikke opsummere eller identificere temaer.", variant: "default" });
       return;
     }
-    setIsSummarizing(true);
+    setIsSummarizing(true); // This state now covers both summary and theme identification
     setSummary(""); 
     setIdentifiedThemes("");
+    // Keep whiteboardContent, generatedImageDataUri, newInsights as they are handled by subsequent steps
+    
+    let summaryResultText = "";
+    let themesResultText = "Generelle temaer"; // Fallback
+
+    try {
+      // Step 1: Summarize
+      const summaryInput: SummarizeTranscriptionInput = { transcription: currentTranscription };
+      const summaryResult = await summarizeTranscription(summaryInput);
+
+      if (summaryResult && typeof summaryResult.summary === 'string' && summaryResult.summary.trim() !== "") {
+        setSummary(summaryResult.summary);
+        summaryResultText = summaryResult.summary;
+        toast({ title: "Succes", description: "Transskription opsummeret." });
+
+        // Step 2: Identify Themes from the summary
+        try {
+          const themesInput: IdentifyThemesInput = { textToAnalyze: summaryResult.summary };
+          const themesResult = await identifyThemes(themesInput);
+          if (themesResult && typeof themesResult.identifiedThemesText === 'string' && themesResult.identifiedThemesText.trim() !== "") {
+            setIdentifiedThemes(themesResult.identifiedThemesText);
+            themesResultText = themesResult.identifiedThemesText;
+            toast({ title: "Succes", description: "Temaer identificeret." });
+          } else {
+            console.warn("Temaidentifikationsfejl: Intet gyldigt tematekst modtaget fra AI.", themesResult);
+            toast({ title: "Info", description: "Ingen specifikke temaer identificeret af AI. Bruger generelle temaer.", variant: "default" });
+            setIdentifiedThemes(themesResultText); // Use fallback
+          }
+        } catch (themeError) {
+          console.error("Temaidentifikationsfejl (catch block):", themeError);
+          const userMessage = getAIUserErrorMessage(themeError, "Kunne ikke identificere temaer");
+          toast({ title: "Fejl ved temaanalyse", description: userMessage, variant: "destructive" });
+          setIdentifiedThemes(themesResultText); // Use fallback
+        }
+      } else {
+        console.error("Opsummeringsfejl: Intet gyldigt resumé modtaget fra AI.", summaryResult);
+        toast({ title: "Fejl", description: "Intet gyldigt resumé modtaget fra AI. Prøv venligst igen.", variant: "destructive" });
+        summaryResultText = currentTranscription; // Fallback to full transcription for ideas/image if summary fails
+        setIdentifiedThemes(themesResultText); // Use fallback themes
+      }
+    } catch (summaryError) {
+      console.error("Opsummeringsfejl (catch block):", summaryError);
+      const userMessage = getAIUserErrorMessage(summaryError, "Kunne ikke opsummere transskription");
+      toast({ title: "Fejl ved opsummering", description: userMessage, variant: "destructive" });
+      summaryResultText = currentTranscription; // Fallback
+      setIdentifiedThemes(themesResultText); // Use fallback themes
+    } finally {
+      setIsSummarizing(false);
+      // Proceed to generate ideas with the best available summary/themes
+      await handleGenerateIdeas(currentTranscription, themesResultText, summaryResultText || currentTranscription);
+    }
+  };
+  
+  const handleGenerateIdeas = async (currentTranscription: string, currentThemes: string, contextForImage: string) => {
+    if (!currentTranscription.trim()) {
+      toast({ title: "Fejl", description: "Transskription er tom for idégenerering.", variant: "destructive" });
+      setIsGeneratingIdeas(false);
+      await handleGenerateImage(currentThemes.trim() || "abstrakt visualisering", contextForImage || summary);
+      return;
+    }
+    if (!currentThemes.trim()) {
+        toast({ title: "Info", description: "Ingen temaer identificeret. Bruger fuld transskription/resumé til idéer.", variant: "default" });
+    }
+    setIsGeneratingIdeas(true);
     setWhiteboardContent("");
     setGeneratedImageDataUri(null);
     setNewInsights("");
-    try {
-      const input: SummarizeTranscriptionInput = { transcription: currentTranscription };
-      const result = await summarizeTranscription(input);
-
-      if (result && typeof result.summary === 'string' && result.summary.trim() !== "") {
-        setSummary(result.summary);
-        const firstSentence = result.summary.split('. ')[0];
-        let themes = "";
-        if (firstSentence) {
-          themes = firstSentence.split(/[\s,]+/) 
-            .map(t => t.replace(/[^\w\sæøåÆØÅ-]/gi, '').toLowerCase())
-            .filter(t => t.length > 3 && !['det', 'er', 'en', 'og', 'den', 'til', 'som'].includes(t)) 
-            .slice(0, 5) 
-            .join(', ');
-        }
-        if (!themes && result.summary.length > 0) { 
-            themes = result.summary.substring(0, Math.min(result.summary.length, 100)); 
-        }
-        setIdentifiedThemes(themes || "Generelle temaer");
-        toast({ title: "Succes", description: "Transskription opsummeret." });
-        await handleGenerateIdeas(currentTranscription, themes || result.summary);
-      } else {
-        console.error("Opsummeringsfejl: Intet gyldigt resumé modtaget fra AI.", result);
-        toast({ title: "Fejl", description: "Intet gyldigt resumé modtaget fra AI. Prøv venligst igen.", variant: "destructive" });
-        await handleGenerateIdeas(currentTranscription, "Generelle temaer");
-      }
-    } catch (error) {
-      console.error("Opsummeringsfejl (catch block):", error);
-      const userMessage = getAIUserErrorMessage(error, "Kunne ikke opsummere transskription");
-      toast({ 
-        title: "Fejl ved opsummering", 
-        description: userMessage, 
-        variant: "destructive" 
-      });
-      await handleGenerateIdeas(currentTranscription, "Generelle temaer");
-    } finally {
-      setIsSummarizing(false);
-    }
-  };
-
-  const handleGenerateIdeas = async (currentTranscription: string, currentThemes: string) => {
-    if (!currentTranscription.trim()) {
-      toast({ title: "Fejl", description: "Transskription er tom for idégenerering.", variant: "destructive" });
-      setIsGeneratingIdeas(false); 
-      await handleGenerateImage(currentThemes.trim() || "abstrakt visualisering", currentTranscription || summary);
-      return;
-    }
-    if (!currentThemes.trim()) { 
-        toast({ title: "Info", description: "Ingen temaer identificeret. Bruger fuld transskription til idéer.", variant: "default" });
-    }
-    setIsGeneratingIdeas(true);
-    setWhiteboardContent(""); 
-    setGeneratedImageDataUri(null);
-    setNewInsights("");
-    let refinedWhiteboardContent = "";
+    
     try {
       const input: GenerateWhiteboardIdeasInput = {
         transcription: currentTranscription,
-        identifiedThemes: currentThemes, 
-        currentWhiteboardContent: "", 
+        identifiedThemes: currentThemes,
+        currentWhiteboardContent: "",
       };
       const result = await generateWhiteboardIdeas(input);
-      refinedWhiteboardContent = result.refinedWhiteboardContent;
-      setWhiteboardContent(refinedWhiteboardContent);
+      setWhiteboardContent(result.refinedWhiteboardContent);
       toast({ title: "Succes", description: "Whiteboard-indhold opdateret med AI-idéer." });
       
-      const imageGenPromptInput = currentThemes.trim() || summary.substring(0, 150).trim() || "abstrakt visualisering af diskussion";
-      await handleGenerateImage(imageGenPromptInput, currentTranscription || summary);
+      const imageGenPromptInput = currentThemes.trim() || contextForImage.substring(0, 150).trim() || "abstrakt visualisering af diskussion";
+      await handleGenerateImage(imageGenPromptInput, contextForImage || summary);
 
     } catch (error) {
       console.error("Idégenereringsfejl:", error);
       const userMessage = getAIUserErrorMessage(error, "Kunne ikke generere whiteboard-idéer");
-      toast({ 
-        title: "Fejl ved idégenerering", 
-        description: userMessage, 
-        variant: "destructive" 
-      });
-      const imageGenPromptInput = currentThemes.trim() || summary.substring(0, 150).trim() || "abstrakt visualisering af diskussion";
-      await handleGenerateImage(imageGenPromptInput, currentTranscription || summary);
+      toast({ title: "Fejl ved idégenerering", description: userMessage, variant: "destructive" });
+      const imageGenPromptInput = currentThemes.trim() || contextForImage.substring(0, 150).trim() || "abstrakt visualisering af diskussion";
+      await handleGenerateImage(imageGenPromptInput, contextForImage || summary);
     } finally {
       setIsGeneratingIdeas(false);
     }
@@ -228,7 +236,7 @@ export default function SynapseScribblePage() {
     setNewInsights(""); 
     try {
       const input: GenerateInsightsInput = { 
-        imageDataUri: imageDataUri, 
+        imageDataUri: imageDataUri || "", // Send empty string if null/undefined
         conversationContext 
       };
       const result = await generateInsights(input);
@@ -248,7 +256,8 @@ export default function SynapseScribblePage() {
   };
 
   const handleUseInsights = (insights: string) => {
-    setTranscription(insights); 
+    setTranscription(insights);
+    // resetAIOutputs(); // Keep this commented to retain insights until new analysis starts
     toast({ 
       title: "Ny Samtale Startet", 
       description: "Indsigter er indsat. Klik på 'Start AI Analyse med Tekst' for at behandle." 
@@ -258,7 +267,7 @@ export default function SynapseScribblePage() {
   const currentLoadingState = () => {
     if (isRecording) return "Optager lyd...";
     if (isTranscribing) return "Transskriberer...";
-    if (isSummarizing) return "Opsummerer...";
+    if (isSummarizing) return "Opsummerer og identificerer temaer..."; // Updated text
     if (isGeneratingIdeas) return "Genererer whiteboard-idéer...";
     if (isGeneratingImage) return "Genererer billede...";
     if (isGeneratingInsights) return "Genererer nye indsigter...";
@@ -297,7 +306,7 @@ export default function SynapseScribblePage() {
             summary={summary}
             identifiedThemes={identifiedThemes}
             newInsights={newInsights}
-            isSummarizing={isSummarizing}
+            isSummarizing={isSummarizing} // This state covers summary & themes
             isGeneratingInsights={isGeneratingInsights}
             onUseInsights={handleUseInsights}
             isAnyAIProcessRunning={isTranscribing || isSummarizing || isGeneratingIdeas || isGeneratingImage || isGeneratingInsights || isRecording}
@@ -309,6 +318,3 @@ export default function SynapseScribblePage() {
     </div>
   );
 }
-    
-
-    

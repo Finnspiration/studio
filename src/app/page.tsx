@@ -8,7 +8,6 @@ import { WhiteboardPanel } from "@/components/whiteboard-panel";
 import { ControlsPanel } from "@/components/controls-panel";
 import { ResultsPanel } from "@/components/results-panel";
 import { useToast } from "@/hooks/use-toast";
-import jsPDF from 'jspdf';
 
 import { summarizeTranscription } from '@/ai/flows/summarize-transcription';
 import type { SummarizeTranscriptionInput, SummarizeTranscriptionOutput } from '@/ai/flows/summarize-transcription';
@@ -85,7 +84,9 @@ export default function SynapseScribblePage() {
     let specificError = FALLBACK_ERROR_MESSAGE;
     if (error instanceof Error) {
       const errorMessageLowerCase = error.message.toLowerCase();
-      if (error.message.includes("503") || 
+       if (error.message.includes("Image generation is not available in your country")) {
+        specificError = "Billedgenerering er desværre ikke tilgængelig i din region.";
+      } else if (error.message.includes("503") || 
           errorMessageLowerCase.includes("service unavailable") || 
           errorMessageLowerCase.includes("overloaded") ||
           errorMessageLowerCase.includes("model is overloaded") ||
@@ -250,28 +251,36 @@ export default function SynapseScribblePage() {
     setActiveGeneratedImageDataUri("Genererer billede..."); 
 
     let finalPromptForAI = `En metaforisk og visuel whiteboard-tegning eller skitse, der repræsenterer følgende koncepter: ${coreImagePrompt}. Stilen skal være minimalistisk, som en hurtig whiteboard-tegning primært med sort tusch på hvid baggrund, eventuelt med få accentfarver (blå/grøn). Undgå meget tekst; fokuser på at bruge symboler, metaforer, diagrammer eller simple abstrakte illustrationer til at repræsentere koncepterne på en tankevækkende måde. Format: widescreen 16:9.`;
+    
+    const isCorePromptInvalid = !coreImagePrompt || 
+                                coreImagePrompt.trim() === '' || 
+                                coreImagePrompt.startsWith("Fejl") || 
+                                coreImagePrompt.startsWith("Kunne ikke") ||
+                                coreImagePrompt.startsWith("Ingen specifikke temaer") ||
+                                coreImagePrompt === FALLBACK_EMPTY_SUMMARY ||
+                                coreImagePrompt === FALLBACK_EMPTY_THEMES ||
+                                coreImagePrompt.startsWith("Ugyldig") ||
+                                coreImagePrompt.startsWith("Kan ikke");
 
-    if (!coreImagePrompt || coreImagePrompt.trim() === '' || 
-        coreImagePrompt.startsWith("Fejl") || 
-        coreImagePrompt.startsWith("Kunne ikke") ||
-        coreImagePrompt.startsWith("Ingen specifikke temaer") ||
-        coreImagePrompt === FALLBACK_EMPTY_SUMMARY ||
-        coreImagePrompt === FALLBACK_EMPTY_THEMES ||
-        coreImagePrompt.startsWith("Ugyldig") ||
-        coreImagePrompt.startsWith("Kan ikke") ||
-        contextForInsights.startsWith("Fejl") || contextForInsights === FALLBACK_EMPTY_SUMMARY) {
-       toast({ title: "Info", description: "Forrige trin fejlede eller manglede meningsfuldt input til billedprompt. Kan ikke generere billede.", variant: "default" });
+    if (isCorePromptInvalid || contextForInsights.startsWith("Fejl") || contextForInsights === FALLBACK_EMPTY_SUMMARY) {
+       toast({ title: "Info", description: "Forrige trin fejlede eller manglede meningsfuldt input til billedprompt. Billedgenerering springes over.", variant: "default" });
        currentImageDataUri = "Billedgenerering sprunget over pga. tidligere fejl eller manglende meningsfuldt input til prompt.";
-       finalPromptForAI = "Fejl: Ugyldigt input til billedgenerering."; // Ensure flow receives an error prompt
+       finalPromptForAI = currentImageDataUri; // Send the error/skip message as the prompt to generateImageFlow for consistent handling
     }
     
     setIsGeneratingImage(true);
     try {        
-      const input: GenerateImageInput = { prompt: finalPromptForAI }; // Send the fully constructed prompt
+      const input: GenerateImageInput = { prompt: finalPromptForAI };
       const result = await generateImage(input);
-      if (!result || !result.imageDataUri || result.imageDataUri.trim() === "" || result.imageDataUri.startsWith("Fejl") || result.imageDataUri.startsWith("Ugyldig prompt") || result.imageDataUri.startsWith("Ugyldig KERNEL")) {
+      
+      if (!result || !result.imageDataUri || result.imageDataUri.trim() === "" || 
+          result.imageDataUri.startsWith("Fejl") || 
+          result.imageDataUri.startsWith("Ugyldig prompt") || 
+          result.imageDataUri.startsWith("Ugyldig KERNEL") ||
+          result.imageDataUri.startsWith("Billedgenerering sprunget over") ||
+          result.imageDataUri.startsWith("GenerateImageFlow: Ugyldig")) {
         currentImageDataUri = result?.imageDataUri || FALLBACK_EMPTY_IMAGE;
-        toast({ title: "Fejl ved billedgenerering", description: currentImageDataUri, variant: "destructive" });
+        toast({ title: "Info/Fejl ved billedgenerering", description: currentImageDataUri, variant: result?.imageDataUri?.startsWith("Fejl") || result?.imageDataUri?.startsWith("Ugyldig") ? "destructive" : "default" });
       } else {
         currentImageDataUri = result.imageDataUri;
         toast({ title: "Succes", description: "Billede genereret." });
@@ -298,10 +307,16 @@ export default function SynapseScribblePage() {
   ): Promise<Omit<CycleData, 'id'>> => {
     let currentNewInsights = FALLBACK_EMPTY_INSIGHTS;
     setActiveNewInsights("Genererer nye indsigter..."); 
-     if (imageDataUri.startsWith("Fejl") || imageDataUri === FALLBACK_EMPTY_IMAGE || imageDataUri.startsWith("Billedgenerering sprunget") ||
+     if (imageDataUri.startsWith("Fejl") || imageDataUri === FALLBACK_EMPTY_IMAGE || 
+         imageDataUri.startsWith("Billedgenerering sprunget") || imageDataUri.includes("ikke tilgængelig i din region") ||
+         imageDataUri.startsWith("GenerateImageFlow: Ugyldig") ||
          conversationContext.startsWith("Fejl") || conversationContext === FALLBACK_EMPTY_SUMMARY) {
        toast({ title: "Info", description: "Forrige trin fejlede eller manglede input. Kan ikke generere indsigter.", variant: "default" });
-       currentNewInsights = imageDataUri.startsWith("Fejl") ? imageDataUri : (conversationContext.startsWith("Fejl") ? conversationContext : "Indsigtsgenerering sprunget over pga. tidligere fejl eller manglende input.");
+       currentNewInsights = imageDataUri.startsWith("Fejl") || imageDataUri.includes("ikke tilgængelig") || imageDataUri.startsWith("GenerateImageFlow: Ugyldig") ? 
+                            `Indsigtsgenerering sprunget over fordi: ${imageDataUri}` : 
+                            (conversationContext.startsWith("Fejl") ? 
+                            `Indsigtsgenerering sprunget over fordi: ${conversationContext}` : 
+                            "Indsigtsgenerering sprunget over pga. tidligere fejl eller manglende input.");
     } else {
       setIsGeneratingInsights(true);
       try {
@@ -429,79 +444,6 @@ export default function SynapseScribblePage() {
     }
   };
 
-  const handleDownloadSessionReportAsPdf = () => {
-    if (!sessionReport || sessionReport.trim() === "" || sessionReport.startsWith("Genererer") || sessionReport.startsWith("Fejl") || sessionReport.startsWith("Kunne ikke")) {
-      toast({ title: "Ingen rapport", description: "Der er ingen rapport at downloade som PDF.", variant: "default" });
-      return;
-    }
-
-    try {
-      const doc = new jsPDF({
-        orientation: 'p',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      const pageHeight = doc.internal.pageSize.height;
-      const pageWidth = doc.internal.pageSize.width;
-      const margin = 15;
-      let currentY = margin;
-      const lineHeight = 6; 
-
-      const addTextToPdf = (text: string, size: number, style: string | string[] = 'normal', indent = 0) => {
-        doc.setFontSize(size);
-        doc.setFont('helvetica', style); 
-        const lines = doc.splitTextToSize(text, pageWidth - margin * 2 - indent);
-        lines.forEach((line: string) => {
-          if (currentY + lineHeight > pageHeight - margin) {
-            doc.addPage();
-            currentY = margin;
-          }
-          doc.text(line, margin + indent, currentY);
-          currentY += lineHeight;
-        });
-      };
-      
-      const reportLines = sessionReport.split('\n');
-
-      reportLines.forEach(line => {
-        if (line.startsWith('# Rapporttitel:')) { 
-            addTextToPdf(line.substring(2), 18, 'bold');
-            currentY += lineHeight / 2; 
-        } else if (line.startsWith('## ')) { 
-          currentY += lineHeight / 2; 
-          addTextToPdf(line.substring(3), 14, 'bold');
-          currentY += lineHeight / 4;
-        } else if (line.startsWith('### ')) { 
-          currentY += lineHeight / 4; 
-          addTextToPdf(line.substring(4), 12, 'bold');
-        } else if (line.startsWith('*   ')) { 
-          addTextToPdf(`• ${line.substring(4)}`, 10, 'normal', 5); 
-        } else if (line.startsWith('-   ')) { 
-          addTextToPdf(`• ${line.substring(4)}`, 10, 'normal', 5);
-        } else if (line.startsWith('---')) { 
-           if (currentY + 5 > pageHeight - margin) { doc.addPage(); currentY = margin; }
-           doc.line(margin, currentY, pageWidth - margin, currentY);
-           currentY += 5;
-        } else if (line.trim() === "") { 
-            currentY += lineHeight / 2;
-        } else {
-          addTextToPdf(line, 10);
-        }
-      });
-      
-      const timestamp = new Date().toISOString().split('T')[0];
-      doc.save(`FraimeWorksLite_SessionRapport_${timestamp}.pdf`);
-      toast({ title: "PDF Download Startet", description: "Sessionsrapport downloades som PDF-fil." });
-
-    } catch (error) {
-        console.error("Fejl ved PDF-generering af sessionsrapport:", error);
-        const userMessage = getAIUserErrorMessage(error, "Fejl ved PDF-generering af sessionsrapport");
-        toast({ title: "Fejl", description: userMessage, variant: "destructive" });
-    }
-  };
-
-
   const currentLoadingStateText = () => {
     if (isRecording) return "Optager lyd...";
     if (isTranscribing) return "Transskriberer...";
@@ -592,7 +534,6 @@ export default function SynapseScribblePage() {
             sessionReport={sessionReport}
             isGeneratingReport={isGeneratingReport}
             onGenerateSessionReport={handleGenerateSessionReport}
-            onDownloadSessionReportAsPdf={handleDownloadSessionReportAsPdf}
             userName={userName}
             userEmail={userEmail}
             userOrganization={userOrganization}
@@ -603,5 +544,3 @@ export default function SynapseScribblePage() {
     </div>
   );
 }
-
-    

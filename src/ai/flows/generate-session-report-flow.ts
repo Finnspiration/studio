@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview A flow for generating a comprehensive session report based on multiple AI analysis cycles.
@@ -65,17 +66,7 @@ const prompt = ai.definePrompt({
   output: {schema: GenerateSessionReportOutputSchema},
   prompt: `Du er en AI-assistent, der har til opgave at generere en omfattende sessionsrapport baseret på en række AI-analysecyklusser.
 Strukturer din output præcist som følger, og brug Markdown til formatering af overskrifter og lister. Sørg for, at alle sektioner adresseres.
-Hvis data for et specifikt punkt i en cyklus er en fallback- eller fejlbesked (f.eks. 'Resumé utilgængeligt', 'Billedgenerering fejlede'), skal du bemærke dette passende i stedet for at forsøge at opfinde indhold. Svar på dansk.
-
-{{#if reportTitle}}Rapportens titel: {{{reportTitle}}}{{/if}}
-{{#if projectName}}Projektnavn: {{{projectName}}}{{/if}}
-{{#if contactPersons}}Kontaktpersoner: {{{contactPersons}}}{{/if}}
-{{#if userName}}Udarbejdet af (Navn): {{{userName}}}{{/if}}
-{{#if userEmail}}Email: {{{userEmail}}}{{/if}}
-{{#if userOrganization}}Organisation (Projekt): {{{userOrganization}}}{{/if}}
-Antal cyklusser: {{sessionCycles.length}}
-
-Her er rapportstrukturen, du skal følge:
+Hvis data for et specifikt punkt i en cyklus er en fallback- eller fejlbesked (f.eks. 'Resumé utilgængeligt', 'Billedgenerering fejlede', 'Billedgenerering er ikke tilgængelig i denne region.'), skal du bemærke dette passende i stedet for at forsøge at opfinde indhold. Svar på dansk.
 
 # Rapporttitel: {{#if reportTitle}}{{reportTitle}}{{else}}AI Analyse Sessionsrapport{{/if}}
 Version/Dato: (Indsæt dags dato automatisk)
@@ -135,7 +126,7 @@ Analyserne og genereringen er foretaget ved hjælp af Gemini-modeller via Genkit
 *   Klynger af relaterede idéer eller risikopunkter: (Baseret på ovenstående, er der klynger af idéer eller potentielle risici, der er blevet fremhævet?)
 
 ## 5. Visuelle fund
-*   Illustrer, hvordan billed­generationen har beriget eller udfordret tekst-indsigterne: (Reflekter over, hvordan det genererede billede (hvis succesfuldt) i hver cyklus potentielt kunne have tilføjet en new dimension til forståelsen af teksten, eller hvordan det kunne have udfordret de oprindelige indsigter. Hvis billedgenerering ofte fejlede, bemærk dette.)
+*   Illustrer, hvordan billed­generationen har beriget eller udfordret tekst-indsigterne: (Reflekter over, hvordan det genererede billede (hvis succesfuldt) i hver cyklus potentielt kunne have tilføjet en new dimension til forståelsen af teksten, eller hvordan det kunne have udfordret de oprindelige indsigter. Hvis billedgenerering ofte fejlede, eller ikke var tilgængelig, bemærk dette.)
 
 ## 6. Strategiske implikationer
 *   Hvad betyder indsigterne for forretnings­mål, produkt­roadmap og ressourcer?: (Baseret på de samlede indsigter, hvilke overordnede strategiske implikationer kan udledes?)
@@ -146,20 +137,6 @@ Analyserne og genereringen er foretaget ved hjælp af Gemini-modeller via Genkit
     *   Quick Wins: (Forslag 1-2)
     *   Long-Term: (Forslag 1-2)
 *   KPI-forslag eller eksperiment­design til validering: (Forslag 1-2)
-
----
-Generer rapporten baseret på de {{sessionCycles.length}} cyklusser.
-Data for cyklusserne:
-{{#each sessionCycles}}
---- Cyklus {{this.displayIndex}} Data ---
-Transskription/Input: {{{this.transcription}}}
-Resumé: {{{this.summary}}}
-Identificerede Temaer: {{{this.identifiedThemes}}}
-Whiteboard Indhold: {{{this.whiteboardContent}}}
-Genereret Billede Status/Prompt: {{{this.processedGeneratedImageStatus}}}
-Nye Indsigter: {{{this.newInsights}}}
---- Slut Cyklus {{this.displayIndex}} Data ---
-{{/each}}
 `,
 });
 
@@ -179,12 +156,14 @@ const generateSessionReportFlow = ai.defineFlow(
       if (cycle.generatedImageDataUri) {
         if (cycle.generatedImageDataUri.startsWith("data:image")) {
           imageStatusMsg = "Billede succesfuldt genereret.";
-        } else if (cycle.generatedImageDataUri.startsWith("Fejl")) {
-          imageStatusMsg = cycle.generatedImageDataUri;
-        } else if (cycle.generatedImageDataUri.startsWith("Billedgenerering")) {
-          imageStatusMsg = `Billedgenerering sprunget over eller fejlede: ${cycle.generatedImageDataUri}.`;
+        } else if (cycle.generatedImageDataUri.includes("ikke tilgængelig i din region")) {
+          imageStatusMsg = "Billedgenerering er ikke tilgængelig i denne region.";
+        } else if (cycle.generatedImageDataUri.startsWith("Fejl") || cycle.generatedImageDataUri.startsWith("GenerateImageFlow: Ugyldig")) {
+          imageStatusMsg = cycle.generatedImageDataUri; // Keep the full error/skip message
+        } else if (cycle.generatedImageDataUri.startsWith("Billedgenerering sprunget over")) {
+          imageStatusMsg = cycle.generatedImageDataUri; 
         } else if (cycle.generatedImageDataUri.trim() !== "" && !cycle.generatedImageDataUri.startsWith("Ugyldig KERNEL")) { 
-            imageStatusMsg = cycle.generatedImageDataUri; 
+            imageStatusMsg = cycle.generatedImageDataUri; // Potentially a valid prompt string if image gen was skipped before API call
         } else if (cycle.generatedImageDataUri.startsWith("Ugyldig KERNEL")) {
             imageStatusMsg = `Billedgenerering fejlede: ${cycle.generatedImageDataUri}`;
         }
@@ -215,15 +194,13 @@ const generateSessionReportFlow = ai.defineFlow(
         console.error("GenerateSessionReportFlow: Output fra prompt var ugyldigt eller manglede rapporttekst.", output);
         return { reportText: "Kunne ikke generere sessionsrapport." };
       }
-      // Inject current date into the report text if a placeholder like (Indsæt dags dato automatisk) is present
+      
       let reportTextWithDate = output.reportText.replace(/\(Indsæt dags dato automatisk\)/g, formattedDate);
       
       return { reportText: reportTextWithDate };
     } catch (error: any) {
-      console.error("GenerateSessionReportFlow: Fejl under prompt-kald. Fejl:", error.message || error, "Input til prompt:", JSON.stringify(promptInput, null, 2));
+      console.error("GenerateSessionReportFlow: Fejl under prompt-kald. Fejl:", error.message || error, "Input til prompt (kan indeholde lange data strenge):", { ...promptInput, sessionCycles: "[Data for sessionCycles skjult for at undgå for lang log-output]" });
       return { reportText: `Fejl under generering af sessionsrapport: ${error.message || error}` };
     }
   }
 );
-
-    

@@ -37,8 +37,19 @@ const generateImageFlow = ai.defineFlow(
     outputSchema: GenerateImageOutputSchema,
   },
   async (input) => {
-    if (!input.prompt || input.prompt.trim() === '' || input.prompt.startsWith("Fejl") || input.prompt.startsWith("Kunne ikke") || input.prompt.startsWith("Ingen specifikke") || input.prompt.startsWith("Ugyldig KERNEL prompt")) {
-      const errorMsg = `GenerateImageFlow: Ugyldig prompt for billedgenerering: "${input.prompt || 'Tom prompt'}". Kan ikke generere billede.`;
+    // More robust check for invalid or insufficient prompts
+    const invalidPromptIndicators = [
+      "Fejl", "Kunne ikke", "Ingen specifikke", "Ugyldig KERNEL prompt", 
+      "Billedgenerering sprunget over", "Resumé utilgængeligt.", "Temaer utilgængelige.",
+      "GenerateImageFlow: Ugyldig prompt"
+    ];
+
+    const isInvalidPrompt = !input.prompt || 
+                            input.prompt.trim() === '' || 
+                            invalidPromptIndicators.some(indicator => input.prompt.includes(indicator));
+
+    if (isInvalidPrompt) {
+      const errorMsg = `GenerateImageFlow: Ugyldig eller utilstrækkelig prompt for billedgenerering: "${input.prompt || 'Tom prompt'}". Billedgenerering springes over.`;
       console.warn(errorMsg);
       return { imageDataUri: errorMsg };
     }
@@ -46,7 +57,7 @@ const generateImageFlow = ai.defineFlow(
     try {
       const { media } = await ai.generate({
         model: 'googleai/gemini-2.0-flash-exp', 
-        prompt: input.prompt, // Use the prompt directly
+        prompt: input.prompt, 
         config: {
           responseModalities: ['TEXT', 'IMAGE'], 
         },
@@ -56,8 +67,6 @@ const generateImageFlow = ai.defineFlow(
       if (Array.isArray(media) && media.length > 0) {
         imageUrl = media[0]?.url;
       } else if (media && typeof media === 'object' && 'url' in media) {
-        // This case might be for older models or different media types.
-        // Ensuring it's handled if 'media' is a single object with a 'url'.
         imageUrl = (media as { url: string }).url;
       }
       
@@ -71,11 +80,15 @@ const generateImageFlow = ai.defineFlow(
       }
       return { imageDataUri: imageUrl };
 
-    } catch (error) {
-      console.error("GenerateImageFlow: Fejl under ai.generate kald", error);
-      return { imageDataUri: `Fejl under billedgenerering: ${error instanceof Error ? error.message : String(error)}` };
+    } catch (error: any) {
+      let errorMessage = `Fejl under billedgenerering: ${error?.message || String(error)}`;
+      if (error?.message && error.message.includes("Image generation is not available in your country")) {
+        errorMessage = "Billedgenerering er desværre ikke tilgængelig i din region.";
+        console.warn(`GenerateImageFlow: ${errorMessage} (Oprindelig fejl: ${error.message})`);
+      } else {
+        console.error("GenerateImageFlow: Fejl under ai.generate kald", error);
+      }
+      return { imageDataUri: errorMessage };
     }
   }
 );
-
-    
